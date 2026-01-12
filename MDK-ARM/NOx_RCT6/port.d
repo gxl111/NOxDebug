@@ -1,0 +1,12 @@
+nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM3/port.c
+nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
+nox_rct6\port.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+nox_rct6\port.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+nox_rct6\port.o: ../Core/Inc/FreeRTOSConfig.h
+nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
+nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h
+nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h
+nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM3/portmacro.h
+nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h
+nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
+nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h
