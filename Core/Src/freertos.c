@@ -31,6 +31,7 @@
 #include "NOx.h"
 #include "oled.h"
 #include "sdcard.h"
+#include "modbus_slave.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -120,6 +121,9 @@ void MX_FREERTOS_Init(void) {
 
 
   J1939_Initialization();
+	// 创建寄存器互斥信号量（优先级继承，避免优先级反转）
+	g_hVarMutex = xSemaphoreCreateMutex();
+	configASSERT(g_hVarMutex != NULL);  // 确保创建成功
 //  HAL_CAN_Start(&hcan);
 //  
 //  HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);

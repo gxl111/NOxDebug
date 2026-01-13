@@ -21,13 +21,39 @@ Target DLL:      STLink\ST-LINKIII-KEIL_SWO.dll V3.0.7.0
 Dialog DLL:      TCM.DLL V1.36.5.0
  
 <h2>Project:</h2>
-D:\SCR\Sensor\NOx\NOx_RCT6\NOx_RCT6\MDK-ARM\NOx_RCT6.uvprojx
+D:\SCR\Sensor\NOx\NOx_RCT6\NOxDebug\MDK-ARM\NOx_RCT6.uvprojx
 Project File Date:  01/09/2026
 
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 6 (build 750)', folder: 'C:\Keil_v5\ARM\ARMCC\Bin'
 Build target 'NOx_RCT6'
-"NOx_RCT6\NOx_RCT6.axf" - 0 Error(s), 0 Warning(s).
+compiling J1939.c...
+..\USER\J1939.c(138): warning:  #177-D: variable "priority"  was declared but never referenced
+      uint8_t priority = (ext_id >> 26) & 0x07;  // 优先级（3位）
+..\USER\J1939.c(139): warning:  #177-D: variable "data_page"  was declared but never referenced
+      uint8_t data_page = (ext_id >> 24) & 0x01; // 数据页（1位）
+..\USER\J1939.c(140): warning:  #177-D: variable "pf"  was declared but never referenced
+      uint8_t pf = (ext_id >> 16) & 0xFF;        // PDU格式（8位）
+..\USER\J1939.c(141): warning:  #177-D: variable "ps"  was declared but never referenced
+      uint8_t ps = (ext_id >> 8) & 0xFF;         // PDU特定（8位）
+..\USER\J1939.c: 4 warnings, 0 errors
+compiling freertos.c...
+compiling main.c...
+compiling NOx.c...
+compiling sdcard.c...
+..\HARDWARE\sdcard.c(620): warning:  #188-D: enumerated type mixed with another type
+          return res;
+..\HARDWARE\sdcard.c(639): warning:  #188-D: enumerated type mixed with another type
+          return res;
+..\HARDWARE\sdcard.c(644): warning:  #188-D: enumerated type mixed with another type
+      if(res != FR_OK) return res;
+..\HARDWARE\sdcard.c(698): warning:  #177-D: variable "fs"  was declared but never referenced
+      FATFS fs;
+..\HARDWARE\sdcard.c: 4 warnings, 0 errors
+linking...
+Program Size: Code=42180 RO-data=3632 RW-data=524 ZI-data=45228  
+FromELF: creating hex file...
+"NOx_RCT6\NOx_RCT6.axf" - 0 Error(s), 8 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -50,7 +76,7 @@ Package Vendor: Keil
 <h2>Collection of Component Files used:</h2>
 
    * Component: ARM::CMSIS:CORE:5.3.0
-Build Time Elapsed:  00:00:00
+Build Time Elapsed:  00:00:02
 </pre>
 </body>
 </html>

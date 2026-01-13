@@ -57,3 +57,6 @@ nox_rct6\freertos.o: ../Core/Inc/spi.h
 nox_rct6\freertos.o: ../Middlewares/Third_Party/FatFs/src/ff.h
 nox_rct6\freertos.o: ../Middlewares/Third_Party/FatFs/src/integer.h
 nox_rct6\freertos.o: ../FATFS/Target/ffconf.h
+nox_rct6\freertos.o: ../USER/modbus_slave.h
+nox_rct6\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/semphr.h
+nox_rct6\freertos.o: ../USER/modbus.h

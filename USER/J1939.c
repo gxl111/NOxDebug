@@ -127,7 +127,38 @@ void J1939_CAN_Transmit(J1939_MESSAGE *MsgPtr)
     }
 
 }
+/**
+ * @brief  解析J1939标识符，判断是否为指定地址的消息
+ * @param  ext_id: 29位CAN扩展标识符
+ * @retval pdTRUE: 是指定地址消息，pdFALSE: 不是
+ */
+static BaseType_t J1939_CheckTargetAddress(uint32_t ext_id)
+{
+    // 1. 提取J1939标识符各字段
+    uint8_t priority = (ext_id >> 26) & 0x07;  // 优先级（3位）
+    uint8_t data_page = (ext_id >> 24) & 0x01; // 数据页（1位）
+    uint8_t pf = (ext_id >> 16) & 0xFF;        // PDU格式（8位）
+    uint8_t ps = (ext_id >> 8) & 0xFF;         // PDU特定（8位）
+    uint8_t sa = ext_id & 0xFF;                // 源地址SA（8位）
 
+    // 2. 过滤源地址（最常用：只接收指定SA的消息）
+    if (sa == NOx_ADDRESS )
+    {
+        return pdTRUE;
+    }
+
+    // 3. 可选：过滤目标地址（仅PF<240时，PS为目标地址DA）
+    // 若需要只接收“发送给自己（或指定DA）”的消息，取消下面注释
+    /*
+    if (pf < 240 && ps == TARGET_DEST_ADDRESS)
+    {
+        return pdTRUE;
+    }
+    */
+
+    // 4. 非指定地址，丢弃
+    return pdFALSE;
+}
 // CAN接收中断处理函数
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
@@ -136,7 +167,13 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
 
     if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxMessage, RxMessageData) == HAL_OK) {
-        //LCD_ShowString(30,500,200,24,24,(uint8_t*)"RECEIVE OK");
+			
+				// 先判断是否为指定地址的消息，非目标地址直接返回
+        if (J1939_CheckTargetAddress(RxMessage.ExtId) == pdFALSE)
+        {
+            // 不是目标地址，丢弃消息，直接退出
+            return;
+        }
         //将29位标志位（can_identifier）写入J1939的结构中
         receivedMsg.Array[0] = RxMessage.ExtId >> (8*3);
         receivedMsg.Array[1] = RxMessage.ExtId >> (8*2);
@@ -157,7 +194,11 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
         receivedMsg.Mxe.Data[7] = RxMessageData[7];
 
         // 处理接收到的J1939消息的代码,消息入队列
-        xQueueSendToBackFromISR(Rx_QueueHandle,&receivedMsg,NULL);
+				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        // xQueueSendToBackFromISR(Rx_QueueHandle,&receivedMsg,NULL);
+				xQueueSendToBackFromISR(Rx_QueueHandle,&receivedMsg,&xHigherPriorityTaskWoken);
+				
+				portYIELD_FROM_ISR(xHigherPriorityTaskWoken); // 必要时触发任务切换
     }
 
 }

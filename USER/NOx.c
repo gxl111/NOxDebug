@@ -113,7 +113,7 @@ void Calibration_NOx(Parameter *p,Parameter *p1) {
     
     
     //更新手动修改后的值(可以手动修改参数)
-		Var_Read_ParamSection1(&NOx_parameter.a,&NOx_parameter.b,&NOx_parameter1.a,&NOx_parameter1.b);
+		Var_Read_ParamSection1(&(p->a),&(p->b),&(p1->a),&(p1->b));
 		
     uint16_t calibration=Var_Read_P08();
     if(calibration==1) {
@@ -149,9 +149,9 @@ void Calibration_NOx(Parameter *p,Parameter *p1) {
         //标定成功
         Var_Write_P08(0x000f);
         
-        // 写入flash
+        
 				Var_Update_ParamSection1(NOx_parameter.a,NOx_parameter.b,NOx_parameter1.a,NOx_parameter1.b);
-				
+				// 写入flash
         InternalFlash_Write();
         
     }
@@ -162,7 +162,7 @@ void Calibration_NOx(Parameter *p,Parameter *p1) {
         Var_Write_P08(0x0010);
         
         Var_Update_ParamSection1(NOx_parameter.a,NOx_parameter.b,NOx_parameter1.a,NOx_parameter1.b);
-        //回复默认后xy也要对应
+        //恢复默认后xy也要对应
         Calibration_Init(NOx_x,NOx_y,NOx_parameter,NOx_parameter1);
     
         InternalFlash_Write();
@@ -179,7 +179,7 @@ void Calibration_O2(Parameter *p,Parameter *p1) {
     
     
     //更新手动修改后的值	
-		Var_Read_ParamSection2(&O2_parameter.a,&O2_parameter.b,&O2_parameter1.a,&O2_parameter1.b);
+		Var_Read_ParamSection2(&(p->a),&(p->b),&(p1->a),&(p1->b));
 	
     uint16_t calibration=Var_Read_P10();
     if(calibration==1) {
@@ -579,9 +579,7 @@ void NOxDefault(void *argument)
 void ModBusSlave(void *argument)
 {
 
-    // 创建寄存器互斥信号量（优先级继承，避免优先级反转）
-    g_hVarMutex = xSemaphoreCreateMutex();
-    configASSERT(g_hVarMutex != NULL);  // 确保创建成功
+
     BLOW_CONTROL(0);
     
     

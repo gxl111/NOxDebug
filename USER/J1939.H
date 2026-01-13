@@ -32,7 +32,7 @@ typedef char           j1939_int8_t;
 
 //设备默认的地址
 #define J1939_STARTING_ADDRESS 0x55
-
+#define NOx_ADDRESS 0x52
 //内部常量
 #define J1939_FALSE       0
 #define J1939_TRUE        1
