@@ -159,23 +159,23 @@ extern void Var_Write_D04(uint16_t value);
 extern uint16_t Var_Read_D04(void);
 
 /* 通用寄存器 */
-extern float Var_Read_P01(void);
-extern float Var_Read_P02(void);
-extern uint16_t Var_Read_P07(void);
-extern void Var_Write_P01(float value);
-extern void Var_Write_P02(float value);
-extern void Var_Write_P07(uint16_t value);
+extern float Var_Read_NoxOutput(void);
+extern float Var_Read_O2Output(void);
+extern uint16_t Var_Read_OutputChStatus(void);
+extern void Var_Write_NoxOutput(float value);
+extern void Var_Write_O2Output(float value);
+extern void Var_Write_OutputChStatus(uint16_t value);
 
-extern void Var_Write_P12(float value);
-extern float Var_Read_P12(void);
-extern void Var_Write_P13(float value);
-extern float Var_Read_P13(void);
-extern void Var_Write_P22(uint16_t value);
-extern uint16_t Var_Read_P22(void);
-extern void Var_Write_P23(uint16_t value);
-extern uint16_t Var_Read_P23(void);
-extern void Var_Write_P34(uint16_t value);
-extern uint16_t Var_Read_P34(void);
+extern void Var_Write_AlarmNoxHi(float value);
+extern float Var_Read_AlarmNoxHi(void);
+extern void Var_Write_AlarmO2Lo(float value);
+extern float Var_Read_AlarmO2Lo(void);
+extern void Var_Write_MaNox(uint16_t value);
+extern uint16_t Var_Read_MaNox(void);
+extern void Var_Write_MaO2(uint16_t value);
+extern uint16_t Var_Read_MaO2(void);
+extern void Var_Write_WorkMode(uint16_t value);
+extern uint16_t Var_Read_WorkMode(void);
 
 /* 传感器寄存器：按通道 ch=0 或 1 访问，两路寄存器数量与功能一致 */
 extern float  Var_Read_SensorLiveNox(uint8_t ch);

@@ -85,7 +85,7 @@ void NOxReceive(void *argument)
 
         /* Work mode from P34 (0=single, 1=primary_backup, 2=fusion). */
         {
-            uint16_t mode_u = Var_Read_P34();
+            uint16_t mode_u = Var_Read_WorkMode();
             if (mode_u <= (uint16_t)NOX_MODE_FUSION)
                 NoxChannel_SetWorkMode((NoxWorkMode_t)mode_u);
         }
@@ -102,16 +102,20 @@ void NOxReceive(void *argument)
             NoxSensor_To4_20mA(nox_out, o2_out, electricity_data_buf);
         }
 
-        /* OLED: show current output and state. */
+        /* OLED: show two sensors + current output and state. */
         {
-            uint8_t buf[24];
-            snprintf((char *)buf, sizeof(buf), "NOx: %5.2f ppm    ", (double)NOx_ppm);
+            uint8_t buf[28];
+            float n1 = Var_Read_SensorLiveNox(0), o1 = Var_Read_SensorLiveO2(0);
+            float n2 = Var_Read_SensorLiveNox(1), o2 = Var_Read_SensorLiveO2(1);
+            snprintf((char *)buf, sizeof(buf), "S1 NOx %5.2f O2 %5.2f%%", (double)n1, (double)o1);
             OLED_PrintASCIIString(0, 10, (char *)buf, &afont16x8, OLED_COLOR_NORMAL);
-            snprintf((char *)buf, sizeof(buf), "O2 : %5.2f %%         ", (double)O2_pct);
-            OLED_PrintASCIIString(0, 30, (char *)buf, &afont16x8, OLED_COLOR_NORMAL);
-            snprintf((char *)buf, sizeof(buf), "state: %5d ", (int)Var_Read_P07());
-            OLED_ColorMode c = (Var_Read_P07() == 0x1FFu) ? OLED_COLOR_NORMAL : OLED_COLOR_REVERSED;
-            OLED_PrintASCIIString(0, 50, (char *)buf, &afont16x8, c);
+            snprintf((char *)buf, sizeof(buf), "S2 NOx %5.2f O2 %5.2f%%", (double)n2, (double)o2);
+            OLED_PrintASCIIString(0, 22, (char *)buf, &afont16x8, OLED_COLOR_NORMAL);
+            snprintf((char *)buf, sizeof(buf), "Out NOx %5.2f O2 %5.2f%%", (double)NOx_ppm, (double)O2_pct);
+            OLED_PrintASCIIString(0, 34, (char *)buf, &afont16x8, OLED_COLOR_NORMAL);
+            snprintf((char *)buf, sizeof(buf), "state: %u", (unsigned)Var_Read_OutputChStatus());
+            OLED_ColorMode c = (Var_Read_OutputChStatus() == 0x1FFu) ? OLED_COLOR_NORMAL : OLED_COLOR_REVERSED;
+            OLED_PrintASCIIString(0, 46, (char *)buf, &afont16x8, c);
         }
 
         /* Heater command: one frame for both sensors (Byte7 = 0x55 for both banks). */
@@ -163,8 +167,8 @@ void ModBusSlave(void *argument)
 /* ----- Register init: sync g_tVar from channel params and blowback config ----- */
 void Register_Init(void)
 {
-    Var_Write_P12((float)NOx_High);
-    Var_Write_P13((float)O2_Low);
+    Var_Write_AlarmNoxHi((float)NOx_High);
+    Var_Write_AlarmO2Lo((float)O2_Low);
     for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
         NoxChannel_t *c = &g_noxChannels[ch];
         Var_Write_SensorSeg1NoxA(ch, c->nox_low.a);

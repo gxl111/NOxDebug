@@ -1097,22 +1097,22 @@ void Var_Write_D04(uint16_t value) { VAR_WRITE_U16(D04, value); }
 uint16_t Var_Read_D04(void) { uint16_t r; VAR_READ_U16(D04, r); return r; }
 
 // ========================== Common P01, P02, P07, P12, P13, P22, P23, P34 ==========================
-float Var_Read_P01(void) { float r; VAR_READ_FLOAT(P01, r); return r; }
-float Var_Read_P02(void) { float r; VAR_READ_FLOAT(P02, r); return r; }
-uint16_t Var_Read_P07(void) { uint16_t r; VAR_READ_U16(P07, r); return r; }
-void Var_Write_P01(float value) { VAR_WRITE_FLOAT(P01, value); }
-void Var_Write_P02(float value) { VAR_WRITE_FLOAT(P02, value); }
-void Var_Write_P07(uint16_t value) { VAR_WRITE_U16(P07, value); }
-void Var_Write_P12(float value) { VAR_WRITE_FLOAT(P12, value); }
-float Var_Read_P12(void) { float r; VAR_READ_FLOAT(P12, r); return r; }
-void Var_Write_P13(float value) { VAR_WRITE_FLOAT(P13, value); }
-float Var_Read_P13(void) { float r; VAR_READ_FLOAT(P13, r); return r; }
-void Var_Write_P22(uint16_t value) { VAR_WRITE_U16(P22, value); }
-uint16_t Var_Read_P22(void) { uint16_t r; VAR_READ_U16(P22, r); return r; }
-void Var_Write_P23(uint16_t value) { VAR_WRITE_U16(P23, value); }
-uint16_t Var_Read_P23(void) { uint16_t r; VAR_READ_U16(P23, r); return r; }
-void Var_Write_P34(uint16_t value) { VAR_WRITE_U16(P34, value); }
-uint16_t Var_Read_P34(void) { uint16_t r; VAR_READ_U16(P34, r); return r; }
+float Var_Read_NoxOutput(void) { float r; VAR_READ_FLOAT(P01, r); return r; }
+float Var_Read_O2Output(void) { float r; VAR_READ_FLOAT(P02, r); return r; }
+uint16_t Var_Read_OutputChStatus(void) { uint16_t r; VAR_READ_U16(P07, r); return r; }
+void Var_Write_NoxOutput(float value) { VAR_WRITE_FLOAT(P01, value); }
+void Var_Write_O2Output(float value) { VAR_WRITE_FLOAT(P02, value); }
+void Var_Write_OutputChStatus(uint16_t value) { VAR_WRITE_U16(P07, value); }
+void Var_Write_AlarmNoxHi(float value) { VAR_WRITE_FLOAT(P12, value); }
+float Var_Read_AlarmNoxHi(void) { float r; VAR_READ_FLOAT(P12, r); return r; }
+void Var_Write_AlarmO2Lo(float value) { VAR_WRITE_FLOAT(P13, value); }
+float Var_Read_AlarmO2Lo(void) { float r; VAR_READ_FLOAT(P13, r); return r; }
+void Var_Write_MaNox(uint16_t value) { VAR_WRITE_U16(P22, value); }
+uint16_t Var_Read_MaNox(void) { uint16_t r; VAR_READ_U16(P22, r); return r; }
+void Var_Write_MaO2(uint16_t value) { VAR_WRITE_U16(P23, value); }
+uint16_t Var_Read_MaO2(void) { uint16_t r; VAR_READ_U16(P23, r); return r; }
+void Var_Write_WorkMode(uint16_t value) { VAR_WRITE_U16(P34, value); }
+uint16_t Var_Read_WorkMode(void) { uint16_t r; VAR_READ_U16(P34, r); return r; }
 
 // ========================== Sensor accessors by channel (ch=0 or 1) ==========================
 #define S(ch) ((ch) == 0 ? &g_tVar.S1 : &g_tVar.S2)

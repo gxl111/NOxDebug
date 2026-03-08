@@ -80,7 +80,7 @@ const osThreadAttr_t ModBus_Slave_attributes = {
 osThreadId_t NOx_ReceiveHandle;
 const osThreadAttr_t NOx_Receive_attributes = {
   .name = "NOx_Receive",
-  .stack_size = 256 * 4,
+  .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ModBus_Host */
@@ -121,9 +121,9 @@ void MX_FREERTOS_Init(void) {
 
 
   J1939_Initialization();
-	// ´´½¨¼Ä´æÆ÷»¥³âĞÅºÅÁ¿£¨ÓÅÏÈ¼¶¼Ì³Ğ£¬±ÜÃâÓÅÏÈ¼¶·´×ª£©
+	// åˆ›å»ºå¯„å­˜å™¨äº’æ–¥ä¿¡å·é‡ï¼ˆä¼˜å…ˆçº§ç»§æ‰¿ï¼Œé¿å…ä¼˜å…ˆçº§åè½¬ï¼‰
 	g_hVarMutex = xSemaphoreCreateMutex();
-	configASSERT(g_hVarMutex != NULL);  // È·±£´´½¨³É¹¦
+	configASSERT(g_hVarMutex != NULL);  // ç¡®ä¿åˆ›å»ºæˆåŠŸ
 //  HAL_CAN_Start(&hcan);
 //  
 //  HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
