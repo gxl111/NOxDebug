@@ -132,8 +132,12 @@ void NOxDefault(void *argument)
     Blowback_Init();
 
     for (;;) {
+        /* 整段标定只持锁一次，内部 Var_Read_* 用递归 mutex 直接通过，避免阻塞时挂入 list 导致卡死 */
+        LOCK_VAR();
         Calibration_NOx(&NOx_parameter, &NOx_parameter1);
         Calibration_O2(&O2_parameter, &O2_parameter1);
+        UNLOCK_VAR();
+
         Alarm_Update();
         Blowback_Update();
 

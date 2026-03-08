@@ -19,8 +19,8 @@ extern uint32_t SBAUD485;
 
 extern SemaphoreHandle_t g_hVarMutex;
 
-#define LOCK_VAR()    xSemaphoreTake(g_hVarMutex, portMAX_DELAY)
-#define UNLOCK_VAR()  xSemaphoreGive(g_hVarMutex)
+#define LOCK_VAR()    xSemaphoreTakeRecursive(g_hVarMutex, portMAX_DELAY)
+#define UNLOCK_VAR()  xSemaphoreGiveRecursive(g_hVarMutex)
 
 /* Coils: D01 sensor1 normal, D02 sensor1 blowback, D03 sensor2 normal, D04 sensor2 blowback */
 #define REG_D01      1
