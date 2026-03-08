@@ -908,14 +908,14 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
 
     if (addr <= COMMON_REG_END) {
         switch (addr) {
-            case 40001: f_value = g_tVar.P01; f_flag = 1; break;
-            case 40003: f_value = g_tVar.P02; f_flag = 1; break;
-            case 40005: value = g_tVar.P07; break;
-            case 40006: f_value = g_tVar.P12; f_flag = 1; break;
-            case 40008: f_value = g_tVar.P13; f_flag = 1; break;
-            case 40010: value = g_tVar.P22; break;
-            case 40011: value = g_tVar.P23; break;
-            case 40012: value = g_tVar.P34; break;
+            case SLAVE_REG_NOX_OUTPUT:      f_value = g_tVar.P01; f_flag = 1; break;
+            case SLAVE_REG_O2_OUTPUT:       f_value = g_tVar.P02; f_flag = 1; break;
+            case SLAVE_REG_OUTPUT_CH_STATUS: value = g_tVar.P07; break;
+            case SLAVE_REG_ALARM_NOX_HI:    f_value = g_tVar.P12; f_flag = 1; break;
+            case SLAVE_REG_ALARM_O2_LO:     f_value = g_tVar.P13; f_flag = 1; break;
+            case SLAVE_REG_MA_NOX:          value = g_tVar.P22; break;
+            case SLAVE_REG_MA_O2:           value = g_tVar.P23; break;
+            case SLAVE_REG_WORK_MODE:       value = g_tVar.P34; break;
             default: return 0;
         }
     } else if (addr >= SENSOR_BASE_1 && addr <= SLAVE_REG_S1_BLOW_CMD) {
@@ -1011,13 +1011,13 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
 
     if (addr <= COMMON_REG_END) {
         switch (addr) {
-            case 40001: value1 = BEBufToUint16(reg_value + 2); g_tVar.P01 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
-            case 40003: value1 = BEBufToUint16(reg_value + 2); g_tVar.P02 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
-            case 40006: value1 = BEBufToUint16(reg_value + 2); g_tVar.P12 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
-            case 40008: value1 = BEBufToUint16(reg_value + 2); g_tVar.P13 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
-            case 40010: g_tVar.P22 = value; break;
-            case 40011: g_tVar.P23 = value; break;
-            case 40012: g_tVar.P34 = value; break;
+            case SLAVE_REG_NOX_OUTPUT:      value1 = BEBufToUint16(reg_value + 2); g_tVar.P01 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case SLAVE_REG_O2_OUTPUT:       value1 = BEBufToUint16(reg_value + 2); g_tVar.P02 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case SLAVE_REG_ALARM_NOX_HI:    value1 = BEBufToUint16(reg_value + 2); g_tVar.P12 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case SLAVE_REG_ALARM_O2_LO:     value1 = BEBufToUint16(reg_value + 2); g_tVar.P13 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case SLAVE_REG_MA_NOX:          g_tVar.P22 = value; break;
+            case SLAVE_REG_MA_O2:           g_tVar.P23 = value; break;
+            case SLAVE_REG_WORK_MODE:       g_tVar.P34 = value; break;
             default: return 0;
         }
         return f_flag ? 2 : 1;

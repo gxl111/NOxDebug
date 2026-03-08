@@ -33,15 +33,15 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_START  40001
 
 /* ==================== 通用寄存器（仅以下几类） ==================== */
-#define SLAVE_REG_P01    40001   /* NOx 输出 (float, 2 regs) */
-#define SLAVE_REG_P02    40003   /* O2 输出 (float, 2 regs) */
-#define SLAVE_REG_P07    40005   /* 当前输出通道状态 (R, u16) */
-#define SLAVE_REG_P12    40006   /* 报警 NOx 高限 (float, 2 regs) */
-#define SLAVE_REG_P13    40008   /* 报警 O2 低限 (float, 2 regs) */
-#define SLAVE_REG_P22    40010   /* 4-20mA NOx 码 (u16) */
-#define SLAVE_REG_P23    40011   /* 4-20mA O2 码 (u16) */
-#define SLAVE_REG_P34    40012   /* 工作模式 0=单路 1=主备 2=融合 (u16) */
-#define COMMON_REG_END   40012   /* 通用结束地址 */
+#define SLAVE_REG_NOX_OUTPUT      40001   /* NOx 输出 (float, 2 regs) */
+#define SLAVE_REG_O2_OUTPUT       40003   /* O2 输出 (float, 2 regs) */
+#define SLAVE_REG_OUTPUT_CH_STATUS 40005  /* 当前输出通道状态 (R, u16) */
+#define SLAVE_REG_ALARM_NOX_HI    40006   /* 报警 NOx 高限 (float, 2 regs) */
+#define SLAVE_REG_ALARM_O2_LO     40008   /* 报警 O2 低限 (float, 2 regs) */
+#define SLAVE_REG_MA_NOX          40010   /* 4-20mA NOx 码 (u16) */
+#define SLAVE_REG_MA_O2           40011   /* 4-20mA O2 码 (u16) */
+#define SLAVE_REG_WORK_MODE       40012   /* 工作模式 0=单路 1=主备 2=融合 (u16) */
+#define COMMON_REG_END            40012   /* 通用结束地址 */
 
 /* ==================== 传感器块（两路完全一致，每块 38 个寄存器地址） ==================== */
 /* 块内顺序: 实时NOx, 实时O2, 状态 | 标定段1 NOx/O2 | 标定段2 NOx/O2 | 标定点2/3 NOx/O2 | 标定控制 NOx/O2 | 反吹 ... */
