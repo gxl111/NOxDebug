@@ -207,12 +207,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
   if(htim->Instance==htim7.Instance) {
         ++time_10ms;
-        if(time_10ms/10==1) {
-            time_10ms=0;
+        if (time_10ms >= 10u) {
+            time_10ms = 0;
             ++time_100ms;
         }
-        if(time_100ms/10==1) {
-            time_100ms=0;
+        if (time_100ms >= 10u) {
+            time_100ms = 0;
             ++time_1s;
             ++time_1s_blow;
 

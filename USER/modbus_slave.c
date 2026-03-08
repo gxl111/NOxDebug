@@ -1,14 +1,7 @@
 /*
-*********************************************************************************************************
-*
-*	模块名称 : MODS通信模块. 从站模式【原创】
-*	文件名称 : modbus_slave.c
-*	版    本 : V1.5
-*	说    明 : 头文件
-*
-*
-*********************************************************************************************************
-*/
+ * modbus_slave.c - Modbus RTU slave. Implements 01H/03H/05H/06H/10H, register map (VAR_T),
+ * coil/register Var_* accessors. RX timeout via TIM2 (3.5 char). Flash: see modbus_flash.h.
+ */
 
 #include "modbus_slave.h"
 #include "main.h"
@@ -19,22 +12,21 @@
 #include "semphr.h"
 /*
 *********************************************************************************************************
-*	                                  参数
+*  Modbus RTU slave - global state
 *********************************************************************************************************
 */
 
 
-//可通过sd卡修改
-//modbus地址
+// Slave address (can override via SD config)
 uint8_t SADDR485=1;
-//串口波特率
+// Baud rate
 uint32_t SBAUD485=115200;
 
 
 
 /*
 *********************************************************************************************************
-*	                                   函数声明
+*  RX timeout / callbacks
 *********************************************************************************************************
 */
 void (*s_TIM_CallBack1)(void);
@@ -66,34 +58,35 @@ static float RegistersToFloat_BE(uint16_t reg1, uint16_t reg2);
 
 /*
 *********************************************************************************************************
-*	                                   变量
+*	                                   ????
 *********************************************************************************************************
 */
 
 
 
-
-static uint8_t g_mods_timeout = 0;
-
-
-
 MODS_T g_tModS = {0};
-//寄存器数据
-VAR_T g_tVar={ .P08=0xffff,.P10=0xffff};
+VAR_T g_tVar = { .S1 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu },
+                 .S2 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu } };
+
+/* Mutex-protected read/write macros for single g_tVar fields; avoid repeating LOCK_VAR/UNLOCK_VAR. */
+#define VAR_READ_U16(member, ret)   do { LOCK_VAR(); (ret) = g_tVar.member; UNLOCK_VAR(); } while(0)
+#define VAR_READ_FLOAT(member, ret) do { LOCK_VAR(); (ret) = g_tVar.member; UNLOCK_VAR(); } while(0)
+#define VAR_WRITE_U16(member, val)  do { LOCK_VAR(); g_tVar.member = (val); UNLOCK_VAR(); } while(0)
+#define VAR_WRITE_FLOAT(member, val) do { LOCK_VAR(); g_tVar.member = (val); UNLOCK_VAR(); } while(0)
 
 
-//接受信号量
+// RX semaphore (signalled on 3.5 char timeout)
 QueueHandle_t MODRx_SemaphoreHandle;
 
 
-//继电器相关
-// 定义一个结构体来表示GPIO端口和引脚
+// Relay GPIO table (D01-D04)
+// Relay pins: Relay0/1 blowback, Relay2/3 calibration etc.
 typedef struct {
     GPIO_TypeDef* port;
     uint16_t pin;
 } GPIOPin_t;
 
-// 创建一个包含所有继电器GPIO信息的数组
+// Relay port/pin array for coil readback
 const GPIOPin_t relayPins[] = {
     {Relay0_GPIO_Port, Relay0_Pin},
     {Relay1_GPIO_Port, Relay1_Pin},
@@ -104,7 +97,7 @@ const GPIOPin_t relayPins[] = {
 
 /*
 *********************************************************************************************************
-*	                                  函数定义
+*	                                  ????????
 *********************************************************************************************************
 */
 
@@ -115,10 +108,8 @@ void Start_Receive(void){
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_Poll
-*	功能说明: 解析数据包. 在主程序中轮流调用。
-*	形    参: 无
-*	返 回 值: 无
+*  Function: MODS_Poll
+*  Description: Check RX semaphore, validate CRC and address, then call MODS_AnalyzeApp under lock.
 *********************************************************************************************************
 */
 void MODS_Poll(void)
@@ -126,37 +117,31 @@ void MODS_Poll(void)
     uint16_t addr;
     uint16_t crc1;
 
-    /* 超过3.5个字符时间后执行MODH_RxTimeOut()函数。全局变量 g_rtu_timeout = 1; 通知主程序开始解码 */
+    /* After 3.5 char timeout callback gives semaphore; we take it here. */
     
-//    if (g_mods_timeout == 0)
-//    {
-//        return;								/* 没有超时，继续接收。不要清零 g_tModS.RxCount */
-//    }
     if(pdTRUE==xSemaphoreTake(MODRx_SemaphoreHandle,portMAX_DELAY)){
-         
-        g_mods_timeout = 0;	 					/* 清标志 */
 
-        if (g_tModS.RxCount < 4)				/* 接收到的数据小于4个字节就认为错误，地址（8bit）+指令（8bit）+操作寄存器（16bit） */
+        if (g_tModS.RxCount < 4)				/* need at least 4 bytes: addr+func+reg */
         {
             goto err_ret;
         }
 
-        /* 计算CRC校验和，这里是将接收到的数据包含CRC16值一起做CRC16，结果是0，表示正确接收 */
+        /* CRC16 over frame; result 0 means valid */
         crc1 = CRC16_Modbus(g_tModS.RxBuf, g_tModS.RxCount);
         if (crc1 != 0)
         {
             goto err_ret;
         }
 
-        /* 站地址 (1字节） */
-        addr = g_tModS.RxBuf[0];				/* 第1字节 站号 */
-        if (addr != SADDR485)		 			/* 判断主机发送的命令地址是否符合 */
+        /* slave address check */
+        addr = g_tModS.RxBuf[0];				/* byte 1: address */
+        if (addr != SADDR485)		 			/* not for us */
         {
             goto err_ret;
         }
 
-        /* 分析应用层协议 */
-				// 加入互斥锁
+        /* dispatch under lock */
+				// analyze and respond
 				LOCK_VAR();
         MODS_AnalyzeApp();
 				UNLOCK_VAR();
@@ -165,18 +150,16 @@ void MODS_Poll(void)
     
 
 err_ret:
-    g_tModS.RxCount = 0;					/* 必须清零计数器，方便下次帧同步 */
+    g_tModS.RxCount = 0;					/* clear for next frame */
 }
 
 
-//使用tim2通道1，计时3.5个字符间隔
+// TIM2 used for 3.5 character timeout
 /*
 *********************************************************************************************************
-*	函 数 名: StartHardTimer
-*	功能说明: 开启定时器计时3.5个字符时间 此处使用定时器2
-*	形    参: _uiTimeOut：超时时间
-*            _pCallBack：超时回调函数函数指针
-*	返 回 值: 无
+*  Function: StartHardTimer
+*  Description: Start hardware timer for 3.5 character timeout; callback on overflow.
+*  Parameters: _uiTimeOut, _pCallBack
 *********************************************************************************************************
 */
 void StartHardTimer(uint32_t _uiTimeOut, void * _pCallBack) {
@@ -184,10 +167,10 @@ void StartHardTimer(uint32_t _uiTimeOut, void * _pCallBack) {
 
     __HAL_TIM_SET_AUTORELOAD(&RX_TIMER, _uiTimeOut);
     s_TIM_CallBack1 = (void (*)(void)) _pCallBack;
-    // 重置计数器为0
+    // Reset counter to 0
     __HAL_TIM_SET_COUNTER(&RX_TIMER, 0);
 
-    // 清除中断标志
+    // Clear update flag and start IT
     __HAL_TIM_CLEAR_FLAG(&RX_TIMER, TIM_FLAG_UPDATE);
     HAL_TIM_Base_Start_IT(&RX_TIMER);
 
@@ -196,19 +179,19 @@ void StartHardTimer(uint32_t _uiTimeOut, void * _pCallBack) {
 
 /*
 *********************************************************************************************************
-*	函 数 名: HAL_TIM_OC_DelayElapsedCallback
-*	功能说明: tim2中断回调函数，判断3.5个字符时间是否达到
-*	形    参: 无
-*	返 回 值: 无
+*	?? ?? ??: HAL_TIM_OC_DelayElapsedCallback
+*	???????: tim2?????????????????3.5????????????????
+*	??    ??: ??
+*	?? ?? ??: ??
 *********************************************************************************************************
 */
 
 //void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
 //    if (htim->Instance == TIM2) {
-//        // 检查是否是通道1触发中断
+//        // ???????????1????????
 //        if (__HAL_TIM_GET_FLAG(htim, TIM_FLAG_CC1) != RESET) {
 //            __HAL_TIM_CLEAR_FLAG(htim, TIM_FLAG_CC1);
-//          //关闭中断
+//          //???????
 //          __HAL_TIM_DISABLE_IT(&htim2, TIM_IT_CC1);
 //            if (s_TIM_CallBack1 != NULL) {
 //                s_TIM_CallBack1();
@@ -219,23 +202,16 @@ void StartHardTimer(uint32_t _uiTimeOut, void * _pCallBack) {
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_ReciveNew
-*	功能说明: 串口接收中断服务程序会调用本函数。当收到一个字节时，执行一次本函数。
-*	形    参: 无
-*	返 回 值: 无
+*  Function: MODS_ReciveNew
+*  Description: Called from UART RX ISR on each byte. Restart 3.5 char timer; store byte.
+*  RTU inter-frame delay depends on baud; see ModbusBaudRate table at top of file.
 *********************************************************************************************************
 */
 void MODS_ReciveNew(uint8_t _byte)
 {
-    /*
-    	3.5个字符的时间间隔，只是用在RTU模式下面，因为RTU模式没有开始符和结束符，
-    	两个数据包之间只能靠时间间隔来区分，Modbus定义在不同的波特率下，间隔时间是不一样的，
-    	详情看此C文件开头
-    */
-    //LCD_ShowString(30,460,210,24,24,"reciving new");
     uint8_t i;
 
-    /* 根据波特率，获取需要延迟的时间 */
+    /* Find baud in table to get timeout (us); timer 1 = slave, timer 2 = host */
     for(i = 0; i < MODBUS_BAUD_RATE_LEN; i++)
     {
         if(SBAUD485 == ModbusBaudRate[i].Bps)
@@ -245,9 +221,7 @@ void MODS_ReciveNew(uint8_t _byte)
         }
     }
 
-    g_mods_timeout = 0;
-
-    /* 硬件定时中断，定时精度us 硬件定时器1用于MODBUS从机, 定时器2用于MODBUS主机*/
+    /* Start timer (us); TIM1 for slave, TIM2 for host */
     StartHardTimer(ModbusBaudRate[i].usTimeOut, (void *)MODS_RxTimeOut);
 
     if (g_tModS.RxCount < S_RX_BUF_SIZE)
@@ -259,18 +233,13 @@ void MODS_ReciveNew(uint8_t _byte)
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_RxTimeOut
-*	功能说明: 超过3.5个字符时间后执行本函数。 设置全局变量 g_mods_timeout = 1，通知主程序开始解码。
-*	形    参: 无
-*	返 回 值: 无
+*  Function: MODS_RxTimeOut
+*  Description: Called after 3.5 char time with no RX. Gives semaphore so MODS_Poll can process frame.
 *********************************************************************************************************
 */
 static void MODS_RxTimeOut(void)
 {
-    
-    xSemaphoreGiveFromISR(MODRx_SemaphoreHandle,NULL);
-    g_mods_timeout = 1;
-    
+    xSemaphoreGiveFromISR(MODRx_SemaphoreHandle, NULL);
 }
 
 
@@ -284,11 +253,9 @@ void RS485_Send_Data_IT(uint8_t *pData, uint16_t Size) {
 }
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_SendWithCRC
-*	功能说明: 发送一串数据, 自动追加2字节CRC
-*	形    参: _pBuf 数据；
-*			  _ucLen 数据长度（不带CRC）
-*	返 回 值: 无
+*  Function: MODS_SendWithCRC
+*  Description: Append 2-byte CRC to buffer and send via RS485.
+*  Parameters: _pBuf, _ucLen (length before CRC)
 *********************************************************************************************************
 */
 static void MODS_SendWithCRC(uint8_t *_pBuf, uint8_t _ucLen)
@@ -306,29 +273,26 @@ static void MODS_SendWithCRC(uint8_t *_pBuf, uint8_t _ucLen)
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_SendAckErr
-*	功能说明: 发送错误应答
-*	形    参: _ucErrCode : 错误代码
-*	返 回 值: 无
+*  Function: MODS_SendAckErr
+*  Description: Send exception response.
+*  Parameters: _ucErrCode = exception code
 *********************************************************************************************************
 */
 static void MODS_SendAckErr(uint8_t _ucErrCode)
 {
     uint8_t txbuf[3];
 
-    txbuf[0] = g_tModS.RxBuf[0];					/* 485地址 */
-    txbuf[1] = g_tModS.RxBuf[1] | 0x80;				/* 异常的功能码 */
-    txbuf[2] = _ucErrCode;							/* 错误代码(01,02,03,04) */
+    txbuf[0] = g_tModS.RxBuf[0];					/* echo slave addr */
+    txbuf[1] = g_tModS.RxBuf[1] | 0x80;				/* set MSB for error */
+    txbuf[2] = _ucErrCode;							/* exception code (01,02,03,04) */
 
     MODS_SendWithCRC(txbuf, 3);
 }
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_SendAckOk
-*	功能说明: 发送正确的应答.
-*	形    参: 无
-*	返 回 值: 无
+*  Function: MODS_SendAckOk
+*  Description: Echo request frame as success response.
 *********************************************************************************************************
 */
 static void MODS_SendAckOk(void)
@@ -346,84 +310,80 @@ static void MODS_SendAckOk(void)
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_AnalyzeApp
-*	功能说明: 分析应用层协议
-*	形    参: 无
-*	返 回 值: 无
+*  Function: MODS_AnalyzeApp
+*  Description: Dispatch by function code.
 *********************************************************************************************************
 */
 static void MODS_AnalyzeApp(void)
 {
     //LCD_ShowString(30,400,210,24,24,"modbus_analyzing");
-    switch (g_tModS.RxBuf[1])				/* 第2个字节 功能码 */
+    switch (g_tModS.RxBuf[1])				/* byte 2: function code */
     {
-    case 0x01:							/* 读取线圈状态*/
+    case 0x01:							/* read coils */
         MODS_01H();
         break;
 
-    case 0x03:							/* 读取保持寄存器（存在g_tVar中）*/
+    case 0x03:							/* read holding registers (g_tVar) */
         MODS_03H();
         break;
 
 
-    case 0x05:							/* 强制单线圈*/
+    case 0x05:							/* write single coil */
         MODS_05H();
         break;
 
-    case 0x06:							/* 写单个保存寄存器（改写g_tVar中的参数）*/
+    case 0x06:							/* write single register to g_tVar */
         MODS_06H();
         break;
 
-    case 0x10:							/* 写多个保存寄存器（改写g_tVar中的参数）*/
+    case 0x10:							/* write multiple registers to g_tVar */
         MODS_10H();
 
         break;
 
     default:
         g_tModS.RspCode = RSP_ERR_CMD;
-        MODS_SendAckErr(g_tModS.RspCode);	/* 告诉主机命令错误 */
+        MODS_SendAckErr(g_tModS.RspCode);	/* unsupported function */
         break;
     }
 }
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_01H
-*	功能说明: 读取线圈状态（对应远程开关D01/D02/D03）
-*	形    参: 无
-*	返 回 值: 无
+*  Function: MODS_01H
+*  Description: Read coil status (D01/D02/D03/D04).
 *********************************************************************************************************
 */
-/* 说明:这里用LED代替继电器,便于观察现象 */
+/* Note: LED/relay state read back from GPIO */
 static void MODS_01H(void)
 {
     /*
-     举例：
-    	主机发送:
-    		01 从机地址
-    		01 功能码
-    		00 寄存器起始地址高字节
-    		13 寄存器起始地址低字节
-    		00 寄存器数量高字节
-    		25 寄存器数量低字节
-    		0E CRC校验低字节
-    		84 CRC校验高字节
+     ??????
+    	????????:
+    		01 ??????
+    		01 ??????
+    		00 ?????????????????
+    		13 ?????????????????
+    		00 ??????????????
+    		25 ??????????????
+    		0E CRC?????????
+    		84 CRC?????????
 
-    	从机应答: 	1代表ON，0代表OFF。若返回的线圈数不为8的倍数，则在最后数据字节未尾使用0代替. BIT0对应第1个
-    		01 从机地址
-    		01 功能码
-    		05 返回字节数
-    		CD 数据1(线圈0013H-线圈001AH)
-    		6B 数据2(线圈001BH-线圈0022H)
-    		B2 数据3(线圈0023H-线圈002AH)
-    		0E 数据4(线圈0032H-线圈002BH)
-    		1B 数据5(线圈0037H-线圈0033H)
-    		45 CRC校验低字节
-    		E6 CRC校验高字节
+    	??????: 	1????ON??0????OFF?????????????????8????????????????????????????0????. BIT0?????1??
+    		01 ??????
+    		01 ??????
+    		05 ?????????
+    		CD ????1(???0013H-???001AH)
+    		6B ????2(???001BH-???0022H)
+    		B2 ????3(???0023H-???002AH)
+    		0E ????4(???0032H-???002BH)
+    		1B ????5(???0037H-???0033H)
+    		45 CRC?????????
+    		E6 CRC?????????
 
-    	例子:
-    		01 01 00 01 00 03   xx xx	--- 查询D01开始的3个继电器状态
-    		01 01 00 03 00 01   xx xx   --- 查询D03继电器的状态
+    	????:
+    		01 01 00 01 00 03   xx xx	--- ?????D01?????3??????????
+    		01 01 00 03 00 01   xx xx   --- ?????D03??????????
     */
     uint16_t reg;
     uint16_t num;
@@ -433,25 +393,25 @@ static void MODS_01H(void)
 
     g_tModS.RspCode = RSP_OK;
 
-    /** 第1步： 判断接到指定个数数据 ===============================================================*/
-    /*  没有外部继电器，直接应答错误
-    	地址（8bit）+指令（8bit）+寄存器起始地址高低字节（16bit）+寄存器个数（16bit）+ CRC16
+    /** ??1???? ????????????????? ===============================================================*/
+    /*  ?????????????????????
+    	?????8bit??+?????8bit??+???????????????????16bit??+???????????16bit??+ CRC16
     */
     if (g_tModS.RxCount != 8)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;				/* 数据值域错误 */
+        g_tModS.RspCode = RSP_ERR_VALUE;				/* ??????????? */
         return;
     }
 
-    /** 第2步： 数据解析 ===========================================================================*/
-    /* 数据是大端，要转换为小端 0是高字节 */
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 			/* 寄存器号 */
-    num = BEBufToUint16(&g_tModS.RxBuf[4]);				/* 寄存器个数 */
+    /** ??2???? ??????? ===========================================================================*/
+    /* ???????????????????????? 0???????? */
+    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 			/* ??????? */
+    num = BEBufToUint16(&g_tModS.RxBuf[4]);				/* ????????? */
 
-    /* 不足字节整数倍，补齐 */
+    /* ??????????????????? */
     m = (num + 7) / 8;
     
-    /* 解析主机命令要读取的状态 */
+    /* ?????????????????????? */
     if ( (num > 0) && (reg + num+ REG_D01 <= REG_DXX + 1))
     {
         for (i = 0; i < m; i++)
@@ -461,7 +421,7 @@ static void MODS_01H(void)
 
         for (i = 0; i < num; i++)
         {
-            //读取继电器状态
+            //???????????
             GPIO_PinState state = HAL_GPIO_ReadPin(relayPins[i].port, relayPins[i].pin);
             switch(i) {
                 case 0: g_tVar.D01 = state; break;
@@ -474,26 +434,26 @@ static void MODS_01H(void)
     }
     else
     {
-        g_tModS.RspCode = RSP_ERR_REG_ADDR;				/* 寄存器地址错误 */
+        g_tModS.RspCode = RSP_ERR_REG_ADDR;				/* ????????????? */
     }
     
-    /** 第3步： 应答回复 =========================================================================*/
-    if (g_tModS.RspCode == RSP_OK)						/* 正确应答 */
+    /** ??3???? ??????? =========================================================================*/
+    if (g_tModS.RspCode == RSP_OK)						/* ?????? */
     {
         g_tModS.TxCount = 0;
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[0]; /* 返回从机地址 */
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[1]; /* 返回从机指令 */
-        g_tModS.TxBuf[g_tModS.TxCount++] = m;				 /* 返回字节数 */
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[0]; /* ????????? */
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[1]; /* ????????? */
+        g_tModS.TxBuf[g_tModS.TxCount++] = m;				 /* ????????? */
 
         for (i = 0; i < m; i++)
         {
-            g_tModS.TxBuf[g_tModS.TxCount++] = status[i];	/* 返回继电器状态 */
+            g_tModS.TxBuf[g_tModS.TxCount++] = status[i];	/* ??????????? */
         }
         MODS_SendWithCRC(g_tModS.TxBuf, g_tModS.TxCount);
     }
     else
     {
-        MODS_SendAckErr(g_tModS.RspCode);				/* 告诉主机命令错误 */
+        MODS_SendAckErr(g_tModS.RspCode);				/* ???????????????? */
     }
 }
 
@@ -502,53 +462,51 @@ static void MODS_01H(void)
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_03H
-*	功能说明: 读取保持寄存器，可读float和uint16_t 在一个或多个保持寄存器中取得当前的二进制值
-*	形    参: 无
-*	返 回 值: 无
+*  Function: MODS_03H
+*  Description: Read holding registers (float or uint16_t), map to g_tVar.
 *********************************************************************************************************
 */
 static void MODS_03H(void)
 {
     /*
-    	从机地址为11H。保持寄存器的起始地址为006BH，结束地址为006DH。该次查询总共访问3个保持寄存器。
+    	????????11H????????????????????006BH???????????006DH??????????????????3????????????
 
-    	主机发送:
-    		11 从机地址
-    		03 功能码
-    		00 寄存器地址高字节
-    		6B 寄存器地址低字节
-    		00 寄存器数量高字节
-    		03 寄存器数量低字节
-    		76 CRC低字节
-    		87 CRC高字节
+    	????????:
+    		11 ??????
+    		03 ??????
+    		00 ??????????????
+    		6B ??????????????
+    		00 ??????????????
+    		03 ??????????????
+    		76 CRC??????
+    		87 CRC??????
 
-    	从机应答: 	保持寄存器的长度为2个字节。对于单个保持寄存器而言，寄存器高字节数据先被传输，
-    				低字节数据后被传输。保持寄存器之间，低地址寄存器先被传输，高地址寄存器后被传输。
-    		11 从机地址
-    		03 功能码
-    		06 字节数
-    		00 数据1高字节(006BH)
-    		6B 数据1低字节(006BH)
-    		00 数据2高字节(006CH)
-    		13 数据2 低字节(006CH)
-    		00 数据3高字节(006DH)
-    		00 数据3低字节(006DH)
-    		38 CRC低字节
-    		B9 CRC高字节
+    	??????: 	???????????????2????????????????????????????????????????????????????
+    				?????????????????????????????????????????????????????????????????
+    		11 ??????
+    		03 ??????
+    		06 ?????
+    		00 ????1??????(006BH)
+    		6B ????1??????(006BH)
+    		00 ????2??????(006CH)
+    		13 ????2 ??????(006CH)
+    		00 ????3??????(006DH)
+    		00 ????3??????(006DH)
+    		38 CRC??????
+    		B9 CRC??????
 
-    	例子:
-    		01 03 30 06 00 01  6B0B      ---- 读 3006H, 触发电流
-    		01 03 4000 0010 51C6         ---- 读 4000H 倒数第1条浪涌记录 32字节
-    		01 03 4001 0010 0006         ---- 读 4001H 倒数第1条浪涌记录 32字节
+    	????:
+    		01 03 30 06 00 01  6B0B      ---- ?? 3006H, ????????
+    		01 03 4000 0010 51C6         ---- ?? 4000H ??????1????????? 32???
+    		01 03 4001 0010 0006         ---- ?? 4001H ??????1????????? 32???
 
-    		01 03 F000 0008 770C         ---- 读 F000H 倒数第1条告警记录 16字节
-    		01 03 F001 0008 26CC         ---- 读 F001H 倒数第2条告警记录 16字节
+    		01 03 F000 0008 770C         ---- ?? F000H ??????1????????? 16???
+    		01 03 F001 0008 26CC         ---- ?? F001H ??????2????????? 16???
 
-    		01 03 7000 0020 5ED2         ---- 读 7000H 倒数第1条波形记录第1段 64字节
-    		01 03 7001 0020 0F12         ---- 读 7001H 倒数第1条波形记录第2段 64字节
+    		01 03 7000 0020 5ED2         ---- ?? 7000H ??????1????????????1?? 64???
+    		01 03 7001 0020 0F12         ---- ?? 7001H ??????1????????????2?? 64???
 
-    		01 03 7040 0020 5F06         ---- 读 7040H 倒数第2条波形记录第1段 64字节
+    		01 03 7040 0020 5F06         ---- ?? 7040H ??????2????????????1?? 64???
     */
     uint16_t reg;
     uint16_t num;
@@ -557,42 +515,42 @@ static void MODS_03H(void)
 
     g_tModS.RspCode = RSP_OK;
 
-    /** 第1步： 判断接到指定个数数据 ===============================================================*/
-    /* 地址（8bit）+指令（8bit）+寄存器起始地址高低字节（16bit）+寄存器个数（16bit）+ CRC16 */
-    if (g_tModS.RxCount != 8)								/* 03H命令必须是8个字节 */
+    /** ??1???? ????????????????? ===============================================================*/
+    /* ?????8bit??+?????8bit??+???????????????????16bit??+???????????16bit??+ CRC16 */
+    if (g_tModS.RxCount != 8)								/* 03H?????????8????? */
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;					/* 数据值域错误 */
+        g_tModS.RspCode = RSP_ERR_VALUE;					/* ??????????? */
         goto err_ret;
     }
 
-    /** 第2步： 数据解析 ===========================================================================*/
-    /* 数据是大端，要转换为小端 */
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 				/* 寄存器号 */
-    num = BEBufToUint16(&g_tModS.RxBuf[4]);					/* 寄存器个数 */
+    /** ??2???? ??????? ===========================================================================*/
+    /* ???????????????????????? */
+    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 				/* ??????? */
+    num = BEBufToUint16(&g_tModS.RxBuf[4]);					/* ????????? */
 
-    /* 读取的数据个数要在范围内 */
+    /* ??????????????????????? */
     //
 //    if(reg+SLAVE_REG_START+num-1>SLAVE_REG_END){
-//        g_tModS.RspCode = RSP_ERR_VALUE;					/* 数据值域错误 */
+//        g_tModS.RspCode = RSP_ERR_VALUE;					/* ??????????? */
 //        goto err_ret;    
 //    }
     if (num > sizeof(reg_value) / 2)
 	{
-		g_tModS.RspCode = RSP_ERR_VALUE;					/* 数据值域错误 */
+		g_tModS.RspCode = RSP_ERR_VALUE;					/* ??????????? */
 		goto err_ret;
 	}
     
-    /* 读取的数据存入到reg_value里面 */
+    /* ?????????????reg_value???? */
     for (i = 0; i < num; i++)
     {
 
          uint8_t read_state=MODS_ReadRegValue(reg, &reg_value[2 * i]);
-         if ( read_state== 0)	/* 读出寄存器值放入reg_value，此函数已经做了大端转小端处理 */
+         if ( read_state== 0)	/* ??????????????reg_value?????????????????????????????? */
         {
-            g_tModS.RspCode = RSP_ERR_REG_ADDR;				/* 寄存器地址错误 */
+            g_tModS.RspCode = RSP_ERR_REG_ADDR;				/* ????????????? */
             break;
         }else if(read_state==2){
-            //浮点数
+            //??????
             ++i;
             ++reg;
         }
@@ -601,102 +559,100 @@ static void MODS_03H(void)
 
     }
     
-    /** 第3步： 应答回复 =========================================================================*/
+    /** ??3???? ??????? =========================================================================*/
 err_ret:
-    if (g_tModS.RspCode == RSP_OK)							 /* 正确应答 */
+    if (g_tModS.RspCode == RSP_OK)							 /* ?????? */
     {
         g_tModS.TxCount = 0;
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[0]; /* 返回从机地址 */
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[1]; /* 返回从机指令 */
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[0]; /* ????????? */
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[1]; /* ????????? */
 
-        g_tModS.TxBuf[g_tModS.TxCount++] =num * 2;			 /* 返回字节数 */
+        g_tModS.TxBuf[g_tModS.TxCount++] =num * 2;			 /* ????????? */
       
         
 
-        for (i = 0; i < num; i++)                            /* 返回数据*/
+        for (i = 0; i < num; i++)                            /* ????????*/
         {
             g_tModS.TxBuf[g_tModS.TxCount++] = reg_value[2*i];
             g_tModS.TxBuf[g_tModS.TxCount++] = reg_value[2*i+1];
         }
 
-        MODS_SendWithCRC(g_tModS.TxBuf, g_tModS.TxCount);	/* 发送正确应答 */
+        MODS_SendWithCRC(g_tModS.TxBuf, g_tModS.TxCount);	/* ??????????? */
     }
     else
     {
-        MODS_SendAckErr(g_tModS.RspCode);					/* 发送错误应答 */
+        MODS_SendAckErr(g_tModS.RspCode);					/* ?????????? */
     }
 }
 
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_05H
-*	功能说明: 强制写单线圈（对应D01/D02/D03）
-*	形    参: 无
-*	返 回 值: 无
+*  Function: MODS_05H
+*  Description: Write single coil (D01/D02/D03/D04).
 *********************************************************************************************************
 */
 static void MODS_05H(void)
 {
     /*
-    	主机发送: 写单个线圈寄存器。FF00H值请求线圈处于ON状态，0000H值请求线圈处于OFF状态
-    	。05H指令设置单个线圈的状态，15H指令可以设置多个线圈的状态。
-    		11 从机地址
-    		05 功能码
-    		00 寄存器地址高字节
-    		AC 寄存器地址低字节
-    		FF 数据1高字节
-    		00 数据2低字节
-    		4E CRC校验高字节
-    		8B CRC校验低字节
+    	????????: ????????????????FF00H?????????????ON????0000H?????????????OFF???
+    	??05H???????????????????15H???????????????????????
+    		11 ??????
+    		05 ??????
+    		00 ??????????????
+    		AC ??????????????
+    		FF ????1??????
+    		00 ????2??????
+    		4E CRC?????????
+    		8B CRC?????????
 
-    	从机应答:
-    		11 从机地址
-    		05 功能码
-    		00 寄存器地址高字节
-    		AC 寄存器地址低字节
-    		FF 寄存器1高字节
-    		00 寄存器1低字节
-    		4E CRC校验高字节
-    		8B CRC校验低字节
+    	??????:
+    		11 ??????
+    		05 ??????
+    		00 ??????????????
+    		AC ??????????????
+    		FF ?????1??????
+    		00 ?????1??????
+    		4E CRC?????????
+    		8B CRC?????????
 
-    	例子:
-    	01 05 10 01 FF 00   D93A   -- D01打开
-    	01 05 10 01 00 00   98CA   -- D01关闭
+    	????:
+    	01 05 10 01 FF 00   D93A   -- D01??
+    	01 05 10 01 00 00   98CA   -- D01???
 
-    	01 05 10 02 FF 00   293A   -- D02打开
-    	01 05 10 02 00 00   68CA   -- D02关闭
+    	01 05 10 02 FF 00   293A   -- D02??
+    	01 05 10 02 00 00   68CA   -- D02???
 
-    	01 05 10 03 FF 00   78FA   -- D03打开
-    	01 05 10 03 00 00   390A   -- D03关闭
+    	01 05 10 03 FF 00   78FA   -- D03??
+    	01 05 10 03 00 00   390A   -- D03???
     */
     uint16_t reg;
     uint16_t value;
 
     g_tModS.RspCode = RSP_OK;
 
-    /** 第1步： 判断接到指定个数数据 ===============================================================*/
-    /* 地址（8bit）+指令（8bit）+寄存器起始地址高低字节（16bit）+寄存器个数（16bit）+ CRC16 */
+    /** ??1???? ????????????????? ===============================================================*/
+    /* ?????8bit??+?????8bit??+???????????????????16bit??+???????????16bit??+ CRC16 */
     if (g_tModS.RxCount != 8)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;		/* 数据值域错误 */
+        g_tModS.RspCode = RSP_ERR_VALUE;		/* ??????????? */
         goto err_ret;
     }
 
-    /** 第2步： 数据解析 ===========================================================================*/
-    /* 数据是大端，要转换为小端 */
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 	/* 寄存器号 */
-    value = BEBufToUint16(&g_tModS.RxBuf[4]);	/* 数据 */
+    /** ??2???? ??????? ===========================================================================*/
+    /* ???????????????????????? */
+    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 	/* ??????? */
+    value = BEBufToUint16(&g_tModS.RxBuf[4]);	/* ???? */
 
     if (value != 0x0000 && value != 0xFF00)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;		/* 数据值域错误 */
+        g_tModS.RspCode = RSP_ERR_VALUE;		/* ??????????? */
         goto err_ret;
     }
     if(value == 0xFF00)value =1;
     
     
-    /* 设置数值 ，控制继电器，FF00H值请求线圈处于ON状态，0000H值请求线圈处于OFF状态*/
+    /* ???????? ????????????FF00H?????????????ON????0000H?????????????OFF???*/
     if (reg+REG_D01 == REG_D01)
     {
         
@@ -720,156 +676,153 @@ static void MODS_05H(void)
     }
     else
     {
-        g_tModS.RspCode = RSP_ERR_REG_ADDR;		/* 寄存器地址错误 */
+        g_tModS.RspCode = RSP_ERR_REG_ADDR;		/* ????????????? */
     }
     
-    /** 第3步： 应答回复 =========================================================================*/
+    /** ??3???? ??????? =========================================================================*/
 err_ret:
-    if (g_tModS.RspCode == RSP_OK)				/* 正确应答 */
+    if (g_tModS.RspCode == RSP_OK)				/* ?????? */
     {
         MODS_SendAckOk();
     }
     else
     {
-        MODS_SendAckErr(g_tModS.RspCode);		/* 告诉主机命令错误 */
+        MODS_SendAckErr(g_tModS.RspCode);		/* ???????????????? */
     }
 }
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_06H
-*	功能说明: 写单个寄存器
-*	形    参: 无
-*	返 回 值: 无
+*  Function: MODS_06H
+*  Description: Write single register.
 *********************************************************************************************************
 */
 static void MODS_06H(void)
 {
 
     /*
-    	写保持寄存器。注意06指令只能操作单个保持寄存器，16指令可以设置单个或多个保持寄存器
+    	???????????????06????????????????????????16??????????????????????????????
 
-    	主机发送:
-    		11 从机地址
-    		06 功能码
-    		00 寄存器地址高字节
-    		01 寄存器地址低字节
-    		00 数据1高字节
-    		01 数据1低字节
-    		9A CRC校验低字节
-    		9B CRC校验高字节
+    	????????:
+    		11 ??????
+    		06 ??????
+    		00 ??????????????
+    		01 ??????????????
+    		00 ????1??????
+    		01 ????1??????
+    		9A CRC?????????
+    		9B CRC?????????
 
-    	从机响应:
-    		11 从机地址
-    		06 功能码
-    		00 寄存器地址高字节
-    		01 寄存器地址低字节
-    		00 数据1高字节
-    		01 数据1低字节
-    		1B CRC校验低字节
-    		5A	CRC校验高字节
+    	??????:
+    		11 ??????
+    		06 ??????
+    		00 ??????????????
+    		01 ??????????????
+    		00 ????1??????
+    		01 ????1??????
+    		1B CRC?????????
+    		5A	CRC?????????
 
-    	例子:
-    		01 06 30 06 00 25  A710    ---- 触发电流设置为 2.5
-    		01 06 30 06 00 10  6707    ---- 触发电流设置为 1.0
+    	????:
+    		01 06 30 06 00 25  A710    ---- ?????????????? 2.5
+    		01 06 30 06 00 10  6707    ---- ?????????????? 1.0
 
 
-    		01 06 30 1B 00 00  F6CD    ---- SMA 滤波系数 = 0 关闭滤波
-    		01 06 30 1B 00 01  370D    ---- SMA 滤波系数 = 1
-    		01 06 30 1B 00 02  770C    ---- SMA 滤波系数 = 2
-    		01 06 30 1B 00 05  36CE    ---- SMA 滤波系数 = 5
+    		01 06 30 1B 00 00  F6CD    ---- SMA ?????? = 0 ??????
+    		01 06 30 1B 00 01  370D    ---- SMA ?????? = 1
+    		01 06 30 1B 00 02  770C    ---- SMA ?????? = 2
+    		01 06 30 1B 00 05  36CE    ---- SMA ?????? = 5
 
-    		01 06 30 07 00 01  F6CB    ---- 测试模式修改为 T1
-    		01 06 30 07 00 02  B6CA    ---- 测试模式修改为 T2
+    		01 06 30 07 00 01  F6CB    ---- ??????????? T1
+    		01 06 30 07 00 02  B6CA    ---- ??????????? T2
 
-    		01 06 31 00 00 00  8736    ---- 擦除浪涌记录区
-    		01 06 31 01 00 00  D6F6    ---- 擦除告警记录区
+    		01 06 31 00 00 00  8736    ---- ?????????????
+    		01 06 31 01 00 00  D6F6    ---- ???????????????
 
     */
 
     uint16_t reg;
+    uint8_t write_state;
 
     g_tModS.RspCode = RSP_OK;
 
-    /** 第1步： 判断接到指定个数数据 ===============================================================*/
-    /* 地址（8bit）+指令（8bit）+寄存器起始地址高低字节（16bit）+写入的值（16bit）+ CRC16 */
+    /** ??1???? ????????????????? ===============================================================*/
+    /* ?????8bit??+????8bit??+???????????????????16bit??+????????16bit??+ CRC16 */
     if (g_tModS.RxCount != 8)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;		/* 数据值域错误 */
+        g_tModS.RspCode = RSP_ERR_VALUE;		/* ??????????? */
         goto err_ret;
     }
 
-    /** 第2步： 数据解析 ===========================================================================*/
-    /* 数据是大端，要转换为小端 */
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 	/* 寄存器号 */
-    //value = BEBufToUint16(&g_tModS.RxBuf[4]);	/* 寄存器值 */
+    /** ??2???? ??????? ===========================================================================*/
+    /* ???????????????????????? */
+    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 	/* ??????? */
+    //value = BEBufToUint16(&g_tModS.RxBuf[4]);	/* ??????? */
     
-    uint8_t write_state=MODS_WriteRegValue(reg, &g_tModS.RxBuf[4]);
+    write_state = MODS_WriteRegValue(reg, &g_tModS.RxBuf[4]);
     
-    if (write_state!=0)	/* 该函数会把写入的值存入寄存器 */
+    if (write_state!=0)	/* ??????????????????????? */
     {
         ;
     }
     else
     {
-        g_tModS.RspCode = RSP_ERR_REG_ADDR;		/* 寄存器地址错误 */
+        g_tModS.RspCode = RSP_ERR_REG_ADDR;		/* ????????????? */
          
     }
 
-    /** 第3步： 应答回复 =========================================================================*/
+    /** ??3???? ??????? =========================================================================*/
 err_ret:
-    if (g_tModS.RspCode == RSP_OK)				/* 正确应答 */
+    if (g_tModS.RspCode == RSP_OK)				/* ?????? */
     {
         MODS_SendAckOk();
     }
     else
     {
-        MODS_SendAckErr(g_tModS.RspCode);		/* 告诉主机命令错误 */
+        MODS_SendAckErr(g_tModS.RspCode);		/* ???????????????? */
     }
 }
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_10H
-*	功能说明: 连续写多个寄存器.  
-*	形    参: 无
-*	返 回 值: 无
+*  Function: MODS_10H
+*  Description: Write multiple registers to g_tVar.
 *********************************************************************************************************
 */
 static void MODS_10H(void)
 {
     /*
-    	从机地址为11H。保持寄存器的其实地址为0001H，寄存器的结束地址为0002H。总共访问2个寄存器。
-    	保持寄存器0001H的内容为000AH，保持寄存器0002H的内容为0102H。
+    	????????11H????????????????????0001H?????????????????0002H?????????2?????????
+    	????????0001H???????000AH??????????0002H???????0102H??
 
-    	主机发送:
-    		11 从机地址
-    		10 功能码
-    		00 寄存器起始地址高字节
-    		01 寄存器起始地址低字节
-    		00 寄存器数量高字节
-    		02 寄存器数量低字节
-    		04 字节数
-    		00 数据1高字节
-    		0A 数据1低字节
-    		01 数据2高字节
-    		02 数据2低字节
-    		C6 CRC校验高字节
-    		F0 CRC校验低字节
+    	????????:
+    		11 ??????
+    		10 ??????
+    		00 ?????????????????
+    		01 ?????????????????
+    		00 ??????????????
+    		02 ??????????????
+    		04 ?????
+    		00 ????1??????
+    		0A ????1??????
+    		01 ????2??????
+    		02 ????2??????
+    		C6 CRC?????????
+    		F0 CRC?????????
 
-    	从机响应:
-    		11 从机地址
-    		06 功能码
-    		00 寄存器地址高字节
-    		01 寄存器地址低字节
-    		00 数据1高字节
-    		01 数据1低字节
-    		1B CRC校验高字节
-    		5A	CRC校验低字节
+    	??????:
+    		11 ??????
+    		06 ??????
+    		00 ??????????????
+    		01 ??????????????
+    		00 ????1??????
+    		01 ????1??????
+    		1B CRC?????????
+    		5A	CRC?????????
 
-    	例子:
-    		01 10 30 00 00 06 0C  07 DE  00 0A  00 01  00 08  00 0C  00 00     389A    ---- 写时钟 2014-10-01 08:12:00
-    		01 10 30 00 00 06 0C  07 DF  00 01  00 1F  00 17  00 3B  00 39     5549    ---- 写时钟 2015-01-31 23:59:57
+    	????:
+    		01 10 30 00 00 06 0C  07 DE  00 0A  00 01  00 08  00 0C  00 00     389A    ---- ????? 2014-10-01 08:12:00
+    		01 10 30 00 00 06 0C  07 DF  00 01  00 1F  00 17  00 3B  00 39     5549    ---- ????? 2015-01-31 23:59:57
 
     */
     uint16_t reg_addr;
@@ -881,33 +834,33 @@ static void MODS_10H(void)
 
     g_tModS.RspCode = RSP_OK;
 
-    /** 第1步： 判断接到指定个数数据 ===============================================================*/
-    /* 地址（8bit）+指令（8bit）+寄存器起始地址高低字节（16bit）+寄存器个数（16bit）+ 字节数（8bit）+ 数据高低字节（16bit）+ CRC16 */
+    /** ??1???? ????????????????? ===============================================================*/
+    /* ?????8bit??+?????8bit??+???????????????????16bit??+???????????16bit??+ ???????8bit??+ ???????????16bit??+ CRC16 */
     if (g_tModS.RxCount < 11)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;			/* 数据值域错误 */
+        g_tModS.RspCode = RSP_ERR_VALUE;			/* ??????????? */
         goto err_ret;
     }
 
-    /** 第2步： 数据解析 ===========================================================================*/
-    /* 数据是大端，要转换为小端 */
-    reg_addr = BEBufToUint16(&g_tModS.RxBuf[2]); 	/* 寄存器号 */
-    reg_num = BEBufToUint16(&g_tModS.RxBuf[4]);		/* 寄存器个数 */
-    byte_num = g_tModS.RxBuf[6];					/* 后面的数据体字节数 */
+    /** ??2???? ??????? ===========================================================================*/
+    /* ???????????????????????? */
+    reg_addr = BEBufToUint16(&g_tModS.RxBuf[2]); 	/* ??????? */
+    reg_num = BEBufToUint16(&g_tModS.RxBuf[4]);		/* ????????? */
+    byte_num = g_tModS.RxBuf[6];					/* ???????????????? */
 
-    /* 判断寄存器个数和后面数据字节数是否一致 */
+    /* ???????????????????????????????? */
     if (byte_num != 2 * reg_num)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;			/* 数据值域错误 */
+        g_tModS.RspCode = RSP_ERR_VALUE;			/* ??????????? */
         goto err_ret;
     }
     
     
-    /* 数据写入 */
+    /* ???????? */
     for (i = 0; i < reg_num; i++)
     {
         
-        //value = BEBufToUint16(&g_tModS.RxBuf[7 + 2 * i]);	/* 寄存器值 */
+        //value = BEBufToUint16(&g_tModS.RxBuf[7 + 2 * i]);	/* ??????? */
         
         uint8_t write_state=MODS_WriteRegValue(reg_addr, &g_tModS.RxBuf[7 + 2 * i]);
         if (write_state == 2)
@@ -917,975 +870,322 @@ static void MODS_10H(void)
         }
         else if(write_state == 0)
         {
-            g_tModS.RspCode = RSP_ERR_REG_ADDR;		/* 寄存器地址错误 */
+            g_tModS.RspCode = RSP_ERR_REG_ADDR;		/* ????????????? */
            
             break;
         }
         ++reg_addr;
     }
     
-    /** 第3步： 应答回复 =========================================================================*/
+    /** ??3???? ??????? =========================================================================*/
 err_ret:
-    if (g_tModS.RspCode == RSP_OK)					/* 正确应答 */
+    if (g_tModS.RspCode == RSP_OK)					/* ?????? */
     {
         MODS_SendAckOk();
     }
     else
     {
-        MODS_SendAckErr(g_tModS.RspCode);			/* 告诉主机命令错误 */
+        MODS_SendAckErr(g_tModS.RspCode);			/* ???????????????? */
     }
 }
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_ReadRegValue
-*	功能说明: 读取保持寄存器的值
-*	形    参: reg_addr 寄存器地址
-*			  reg_value 存放寄存器结果
-*	返 回 值: 1表示OK 0表示错误
+*  MODS_ReadRegValue: map (reg_addr + SLAVE_REG_START) to g_tVar. Returns 1=u16, 2=float, 0=error
 *********************************************************************************************************
 */
-//直接强制转换为 uint32_t 不是正确获取其内部二进制表示的方式,需要用联合体
-union {
-    float f;
-    uint32_t u;
-} converter;
+union { float f; uint32_t u; } converter;
+
+static float RegistersToFloat_BE(uint16_t reg1, uint16_t reg2);
+
 static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
 {
-    
-    uint16_t value;
-    //浮点数判断
-    float f_value;
-    uint8_t f_flag;
-    switch (reg_addr+SLAVE_REG_START)									/* 判断寄存器地址 */
-    {
-    case SLAVE_REG_P01:
-        if(sizeof(g_tVar.P01)==4){
-           f_value = g_tVar.P01;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P01;
-        }
+    uint16_t addr = reg_addr + SLAVE_REG_START;
+    uint16_t value = 0;
+    float f_value = 0.0f;
+    uint8_t f_flag = 0;
+    SensorRegs_t *s;
 
-        break;
-
-    case SLAVE_REG_P02:
-        if(sizeof(g_tVar.P02)==4){
-           f_value = g_tVar.P02;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P02;
+    if (addr <= COMMON_REG_END) {
+        switch (addr) {
+            case 40001: f_value = g_tVar.P01; f_flag = 1; break;
+            case 40003: f_value = g_tVar.P02; f_flag = 1; break;
+            case 40005: value = g_tVar.P07; break;
+            case 40006: f_value = g_tVar.P12; f_flag = 1; break;
+            case 40008: f_value = g_tVar.P13; f_flag = 1; break;
+            case 40010: value = g_tVar.P22; break;
+            case 40011: value = g_tVar.P23; break;
+            case 40012: value = g_tVar.P34; break;
+            default: return 0;
         }
-        break;
-        
-    case SLAVE_REG_P03:
-        if(sizeof(g_tVar.P03)==4){
-           f_value = g_tVar.P03;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P03;
-        }
-        break;
-        
-    case SLAVE_REG_P04:
-        if(sizeof(g_tVar.P04)==4){
-           f_value = g_tVar.P04;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P04;
-        }
-        break;
-        
-    case SLAVE_REG_P05:
-        if(sizeof(g_tVar.P05)==4){
-           f_value = g_tVar.P05;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P05;
-        }
-        break;
-        
-    case SLAVE_REG_P06:
-        if(sizeof(g_tVar.P06)==4){
-           f_value = g_tVar.P06;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P06;
-        }
-        break;
-        
-    case SLAVE_REG_P07:
-        if(sizeof(g_tVar.P07)==4){
-           f_value = g_tVar.P07;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P07;
-        }
-        break;
-        
-    case SLAVE_REG_P08:
-        if(sizeof(g_tVar.P08)==4){
-           f_value = g_tVar.P08;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P08;
-        }
-        break;
-    case SLAVE_REG_P09:
-        if(sizeof(g_tVar.P09)==4){
-           f_value = g_tVar.P09;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P09;
-        }
-        break;
-    case SLAVE_REG_P10:
-        if(sizeof(g_tVar.P10)==4){
-           f_value = g_tVar.P10;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P10;
-        }
-        break;
-    case SLAVE_REG_P11:
-        if(sizeof(g_tVar.P11)==4){
-           f_value = g_tVar.P11;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P11;
-        }
-        break;  
-    case SLAVE_REG_P12:
-        if(sizeof(g_tVar.P12)==4){
-           f_value = g_tVar.P12;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P12;
-        }
-        break; 
-    case SLAVE_REG_P13:
-        if(sizeof(g_tVar.P13)==4){
-           f_value = g_tVar.P13;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P13;
-        }
-        break; 
-        
-    case SLAVE_REG_P14:
-        if(sizeof(g_tVar.P14)==4){
-           f_value = g_tVar.P14;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P14;
-        }
-        break;
-        
-    case SLAVE_REG_P15:
-        if(sizeof(g_tVar.P15)==4){
-           f_value = g_tVar.P15;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P15;
-        }
-        break;
-        
-    case SLAVE_REG_P16:
-        if(sizeof(g_tVar.P16)==4){
-           f_value = g_tVar.P16;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P16;
-        }
-        break;
-        
-    case SLAVE_REG_P17:
-        if(sizeof(g_tVar.P17)==4){
-           f_value = g_tVar.P17;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P17;
-        }
-        break; 
-    case SLAVE_REG_P18:
-        if(sizeof(g_tVar.P18)==4){
-           f_value = g_tVar.P18;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P18;
-        }
-        break;
-    case SLAVE_REG_P19:
-        if(sizeof(g_tVar.P19)==4){
-           f_value = g_tVar.P19;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P19;
-        }
-        break;
-    case SLAVE_REG_P20:
-        if(sizeof(g_tVar.P20)==4){
-           f_value = g_tVar.P20;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P20;
-        }
-        break;
-    case SLAVE_REG_P21:
-        if(sizeof(g_tVar.P21)==4){
-           f_value = g_tVar.P21;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P21;
-        }
-        break; 
-    case SLAVE_REG_P22:
-        if(sizeof(g_tVar.P22)==4){
-           f_value = g_tVar.P22;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P22;
-        }
-        break; 
-    case SLAVE_REG_P23:
-        if(sizeof(g_tVar.P23)==4){
-           f_value = g_tVar.P23;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P23;
-        }
-        break;   
-    case SLAVE_REG_P24:
-        if(sizeof(g_tVar.P24)==4){
-           f_value = g_tVar.P24;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P24;
-        }
-        break;  
-    case SLAVE_REG_P25:
-        if(sizeof(g_tVar.P25)==4){
-           f_value = g_tVar.P25;
-           f_flag=1;
-        }else{
-            value =	g_tVar.P25;
-        }
-        break;  
-    default:
-        return 0;									/* 参数异常，返回 0 */
+    } else if (addr >= SENSOR_BASE_1 && addr <= SLAVE_REG_S1_BLOW_CMD) {
+        s = &g_tVar.S1;
+        goto sensor_read;
+    } else if (addr >= SENSOR_BASE_2 && addr <= SLAVE_REG_S2_BLOW_CMD) {
+        s = &g_tVar.S2;
+        goto sensor_read;
+    } else {
+        return 0;
     }
-    
-    if(f_flag==1){
+    goto output;
+
+sensor_read:
+    switch (addr) {
+        case 40013: case 40014: f_value = s->live_nox; f_flag = 1; break;
+        case 40015: case 40016: f_value = s->live_o2;  f_flag = 1; break;
+        case 40017: value = s->status; break;
+        case 40018: case 40019: f_value = s->seg1_nox_a; f_flag = 1; break;
+        case 40020: case 40021: f_value = s->seg1_nox_b; f_flag = 1; break;
+        case 40022: case 40023: f_value = s->seg1_o2_a;  f_flag = 1; break;
+        case 40024: case 40025: f_value = s->seg1_o2_b;  f_flag = 1; break;
+        case 40026: case 40027: f_value = s->seg2_nox_a; f_flag = 1; break;
+        case 40028: case 40029: f_value = s->seg2_nox_b; f_flag = 1; break;
+        case 40030: case 40031: f_value = s->seg2_o2_a;  f_flag = 1; break;
+        case 40032: case 40033: f_value = s->seg2_o2_b;  f_flag = 1; break;
+        case 40034: case 40035: f_value = s->p2_nox; f_flag = 1; break;
+        case 40036: case 40037: f_value = s->p2_o2;  f_flag = 1; break;
+        case 40038: case 40039: f_value = s->p3_nox; f_flag = 1; break;
+        case 40040: case 40041: f_value = s->p3_o2;  f_flag = 1; break;
+        case 40042: value = s->nox_cal_trig; break;
+        case 40043: value = s->nox_pt_sel; break;
+        case 40044: value = s->o2_cal_trig; break;
+        case 40045: value = s->o2_pt_sel; break;
+        case 40046: value = s->blow_interval; break;
+        case 40047: value = s->blow_duration; break;
+        case 40048: value = s->blow_status; break;
+        case 40049: value = s->blow_countdown; break;
+        case 40050: value = s->blow_cmd; break;
+        case 40056: case 40057: f_value = s->seg1_nox_a; f_flag = 1; break;
+        case 40058: case 40059: f_value = s->seg1_nox_b; f_flag = 1; break;
+        case 40060: case 40061: f_value = s->seg1_o2_a;  f_flag = 1; break;
+        case 40062: case 40063: f_value = s->seg1_o2_b;  f_flag = 1; break;
+        case 40064: case 40065: f_value = s->seg2_nox_a; f_flag = 1; break;
+        case 40066: case 40067: f_value = s->seg2_nox_b; f_flag = 1; break;
+        case 40068: case 40069: f_value = s->seg2_o2_a;  f_flag = 1; break;
+        case 40070: case 40071: f_value = s->seg2_o2_b;  f_flag = 1; break;
+        case 40072: case 40073: f_value = s->p2_nox; f_flag = 1; break;
+        case 40074: case 40075: f_value = s->p2_o2;  f_flag = 1; break;
+        case 40076: case 40077: f_value = s->p3_nox; f_flag = 1; break;
+        case 40078: case 40079: f_value = s->p3_o2;  f_flag = 1; break;
+        case 40080: value = s->nox_cal_trig; break;
+        case 40081: value = s->nox_pt_sel; break;
+        case 40082: value = s->o2_cal_trig; break;
+        case 40083: value = s->o2_pt_sel; break;
+        case 40084: value = s->blow_interval; break;
+        case 40085: value = s->blow_duration; break;
+        case 40086: value = s->blow_status; break;
+        case 40087: value = s->blow_countdown; break;
+        case 40088: value = s->blow_cmd; break;
+        case 40051: case 40052: f_value = s->live_nox; f_flag = 1; break;
+        case 40053: case 40054: f_value = s->live_o2;  f_flag = 1; break;
+        case 40055: value = s->status; break;
+        default: return 0;
+    }
+
+output:
+    if (f_flag) {
         converter.f = f_value;
         reg_value[0] = (converter.u >> 24) & 0xFF;
         reg_value[1] = (converter.u >> 16) & 0xFF;
         reg_value[2] = (converter.u >> 8) & 0xFF;
         reg_value[3] = converter.u & 0xFF;
         return 2;
-    
-    }else{
-        reg_value[0] = value >> 8;                          /* 注意数据是大端  */
-        reg_value[1] = value;
     }
-
-    return 1;											/* 读取成功 */
+    reg_value[0] = value >> 8;
+    reg_value[1] = value & 0xFF;
+    return 1;
 }
 
 /*
 *********************************************************************************************************
-*	函 数 名: MODS_WriteRegValue
-*	功能说明: 写保持寄存器的值
-*	形    参: reg_addr 寄存器地址
-*			  reg_value 寄存器值
-*	返 回 值: 1表示OK 0表示错误
+*  MODS_WriteRegValue: map (reg_addr + SLAVE_REG_START) to g_tVar. Returns 1=u16, 2=float, 0=error
 *********************************************************************************************************
 */
 static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
 {
-    
-    uint8_t f_flag=0;
-    uint16_t value =BEBufToUint16(reg_value);
+    uint16_t addr = reg_addr + SLAVE_REG_START;
+    uint16_t value = BEBufToUint16(reg_value);
     uint16_t value1;
-    
-    switch (reg_addr+SLAVE_REG_START)							/* 判断寄存器地址 */
-    {
-    case SLAVE_REG_P01:
-        				/* 将值写入保存寄存器 */
-        if(sizeof(g_tVar.P01)==4){
-           value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P01 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P01 = value;
-        }
-        break;
+    uint8_t f_flag = 0;
+    SensorRegs_t *s;
 
-    case SLAVE_REG_P02:
-        if(sizeof(g_tVar.P02)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P02 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P02 = value;
+    if (addr <= COMMON_REG_END) {
+        switch (addr) {
+            case 40001: value1 = BEBufToUint16(reg_value + 2); g_tVar.P01 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case 40003: value1 = BEBufToUint16(reg_value + 2); g_tVar.P02 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case 40006: value1 = BEBufToUint16(reg_value + 2); g_tVar.P12 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case 40008: value1 = BEBufToUint16(reg_value + 2); g_tVar.P13 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case 40010: g_tVar.P22 = value; break;
+            case 40011: g_tVar.P23 = value; break;
+            case 40012: g_tVar.P34 = value; break;
+            default: return 0;
         }
-        break;
-    case SLAVE_REG_P03:
-        if(sizeof(g_tVar.P03)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P03 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P03 = value;
-        }
-        break;
-    case SLAVE_REG_P04:
-        if(sizeof(g_tVar.P04)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P04 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P04 = value;
-        }
-        break;
-    case SLAVE_REG_P05:
-        if(sizeof(g_tVar.P05)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P05 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P05 = value;
-        }
-        break;
-    case SLAVE_REG_P06:
-        if(sizeof(g_tVar.P06)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P06 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P06 = value;
-        }
-        break;        
-    case SLAVE_REG_P08:
-        if(sizeof(g_tVar.P08)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P08 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P08 = value;
-        }
-        break;  
-    case SLAVE_REG_P09:
-        if(sizeof(g_tVar.P09)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P09 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P09 = value;
-        }
-        break; 
-    case SLAVE_REG_P10:
-        if(sizeof(g_tVar.P10)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P10 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P10 = value;
-        }
-        break;
-    case SLAVE_REG_P11:
-        if(sizeof(g_tVar.P11)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P11 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P11 = value;
-        }
-        break;  
-    case SLAVE_REG_P12:
-        if(sizeof(g_tVar.P12)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P12 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P12 = value;
-        }
-        break;
-    case SLAVE_REG_P13:
-        if(sizeof(g_tVar.P13)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P13 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P13 = value;
-        }
-        break; 
-    case SLAVE_REG_P14:
-        if(sizeof(g_tVar.P14)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P14 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P14 = value;
-        }
-        break; 
-    case SLAVE_REG_P15:
-        if(sizeof(g_tVar.P15)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P15 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P15 = value;
-        }
-        break; 
-    case SLAVE_REG_P16:
-        if(sizeof(g_tVar.P16)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P16 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P16 = value;
-        }
-        break; 
-    case SLAVE_REG_P17:
-        if(sizeof(g_tVar.P17)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P17 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P17 = value;
-        }
-        break; 
-
-    case SLAVE_REG_P18:
-        if(sizeof(g_tVar.P18)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P18 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P18 = value;
-        }
-        break;  
-    case SLAVE_REG_P19:
-        if(sizeof(g_tVar.P19)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P19 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P19 = value;
-        }
-        break; 
-    case SLAVE_REG_P20:
-        if(sizeof(g_tVar.P20)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P20 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P20 = value;
-        }
-        break;
-    case SLAVE_REG_P21:
-        if(sizeof(g_tVar.P21)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P21 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P21 = value;
-        }
-        break; 
-    case SLAVE_REG_P24:
-        if(sizeof(g_tVar.P24)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P24 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P24 = value;
-        }
-        break;
-    case SLAVE_REG_P25:
-        if(sizeof(g_tVar.P25)==4){
-            value1 =BEBufToUint16(reg_value+2);
-           g_tVar.P25 = RegistersToFloat_BE(value,value1);
-           f_flag=1;
-        }else{
-            g_tVar.P25 = value;
-        }
-        break;         
-    default:
-        return 0;		/* 参数异常，返回 0 */
+        return f_flag ? 2 : 1;
     }
 
-    if(f_flag==1) return 2;
-    
-    return 1;		/* 读取成功 */
+    if (addr >= SENSOR_BASE_1 && addr <= SLAVE_REG_S1_BLOW_CMD)
+        s = &g_tVar.S1;
+    else if (addr >= SENSOR_BASE_2 && addr <= SLAVE_REG_S2_BLOW_CMD)
+        s = &g_tVar.S2;
+    else
+        return 0;
+
+    switch (addr) {
+        case 40013: case 40014: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); return 2;
+        case 40015: case 40016: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); return 2;
+        case 40018: case 40019: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); return 2;
+        case 40020: case 40021: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); return 2;
+        case 40022: case 40023: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); return 2;
+        case 40024: case 40025: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); return 2;
+        case 40026: case 40027: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); return 2;
+        case 40028: case 40029: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); return 2;
+        case 40030: case 40031: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); return 2;
+        case 40032: case 40033: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); return 2;
+        case 40034: case 40035: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); return 2;
+        case 40036: case 40037: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); return 2;
+        case 40038: case 40039: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); return 2;
+        case 40040: case 40041: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); return 2;
+        case 40042: s->nox_cal_trig = value; return 1;
+        case 40043: s->nox_pt_sel = value; return 1;
+        case 40044: s->o2_cal_trig = value; return 1;
+        case 40045: s->o2_pt_sel = value; return 1;
+        case 40046: s->blow_interval = value; return 1;
+        case 40047: s->blow_duration = value; return 1;
+        case 40050: s->blow_cmd = value; return 1;
+        case 40051: case 40052: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); return 2;
+        case 40053: case 40054: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); return 2;
+        case 40056: case 40057: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); return 2;
+        case 40058: case 40059: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); return 2;
+        case 40060: case 40061: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); return 2;
+        case 40062: case 40063: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); return 2;
+        case 40064: case 40065: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); return 2;
+        case 40066: case 40067: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); return 2;
+        case 40068: case 40069: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); return 2;
+        case 40070: case 40071: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); return 2;
+        case 40072: case 40073: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); return 2;
+        case 40074: case 40075: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); return 2;
+        case 40076: case 40077: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); return 2;
+        case 40078: case 40079: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); return 2;
+        case 40080: s->nox_cal_trig = value; return 1;
+        case 40081: s->nox_pt_sel = value; return 1;
+        case 40082: s->o2_cal_trig = value; return 1;
+        case 40083: s->o2_pt_sel = value; return 1;
+        case 40084: s->blow_interval = value; return 1;
+        case 40085: s->blow_duration = value; return 1;
+        case 40088: s->blow_cmd = value; return 1;
+        default: return 0;
+    }
 }
 
-// 从两个寄存器恢复浮点数（高字节在前）
+// Convert two BE registers to float
 float RegistersToFloat_BE(uint16_t reg1, uint16_t reg2) {
     converter.u = ((uint32_t)reg1 << 16) | reg2;
     return converter.f;
 }
 
-//直接强制转换为 uint32_t 不是正确获取其内部二进制表示的方式,需要用联合体
-union {
-    float f;
-    uint32_t u;
-} flash_converter;
-int InternalFlash_Write(void)
- {
+// ========================== Coil D01-D04 ==========================
+void Var_Write_D01(uint16_t value) { VAR_WRITE_U16(D01, value); }
+uint16_t Var_Read_D01(void) { uint16_t r; VAR_READ_U16(D01, r); return r; }
 
-     uint32_t Address = 0x00;        //记录写入的地址
-     
-     uint32_t DATA_32[12];      //记录写入的数据
-     uint32_t NbrOfPage = 0x00;      //记录写入多少页
-     __IO uint32_t Data32 = 0;
+void Var_Write_D02(uint16_t value) { VAR_WRITE_U16(D02, value); }
+uint16_t Var_Read_D02(void) { uint16_t r; VAR_READ_U16(D02, r); return r; }
 
-     uint32_t SECTORError = 0;
-     int MemoryProgramStatus = 1;//记录整个测试结果
+void Var_Write_D03(uint16_t value) { VAR_WRITE_U16(D03, value); }
+uint16_t Var_Read_D03(void) { uint16_t r; VAR_READ_U16(D03, r); return r; }
 
-     static FLASH_EraseInitTypeDef EraseInitStruct;
-     /* 解锁 */
-     HAL_FLASH_Unlock();
+void Var_Write_D04(uint16_t value) { VAR_WRITE_U16(D04, value); }
+uint16_t Var_Read_D04(void) { uint16_t r; VAR_READ_U16(D04, r); return r; }
 
-     /* 计算要擦除多少页 */
-     NbrOfPage = (FLASH_USER_END_ADDR - FLASH_USER_START_ADDR) / FLASH_PAGE_SIZE;
-     EraseInitStruct.TypeErase     = FLASH_TYPEERASE_PAGES;
-     EraseInitStruct.NbPages       = NbrOfPage;
-     EraseInitStruct.PageAddress   = FLASH_USER_START_ADDR;
+// ========================== Common P01, P02, P07, P12, P13, P22, P23, P34 ==========================
+float Var_Read_P01(void) { float r; VAR_READ_FLOAT(P01, r); return r; }
+float Var_Read_P02(void) { float r; VAR_READ_FLOAT(P02, r); return r; }
+uint16_t Var_Read_P07(void) { uint16_t r; VAR_READ_U16(P07, r); return r; }
+void Var_Write_P01(float value) { VAR_WRITE_FLOAT(P01, value); }
+void Var_Write_P02(float value) { VAR_WRITE_FLOAT(P02, value); }
+void Var_Write_P07(uint16_t value) { VAR_WRITE_U16(P07, value); }
+void Var_Write_P12(float value) { VAR_WRITE_FLOAT(P12, value); }
+float Var_Read_P12(void) { float r; VAR_READ_FLOAT(P12, r); return r; }
+void Var_Write_P13(float value) { VAR_WRITE_FLOAT(P13, value); }
+float Var_Read_P13(void) { float r; VAR_READ_FLOAT(P13, r); return r; }
+void Var_Write_P22(uint16_t value) { VAR_WRITE_U16(P22, value); }
+uint16_t Var_Read_P22(void) { uint16_t r; VAR_READ_U16(P22, r); return r; }
+void Var_Write_P23(uint16_t value) { VAR_WRITE_U16(P23, value); }
+uint16_t Var_Read_P23(void) { uint16_t r; VAR_READ_U16(P23, r); return r; }
+void Var_Write_P34(uint16_t value) { VAR_WRITE_U16(P34, value); }
+uint16_t Var_Read_P34(void) { uint16_t r; VAR_READ_U16(P34, r); return r; }
 
-     if (HAL_FLASHEx_Erase(&EraseInitStruct, &SECTORError) != HAL_OK) {
-         /*擦除出错，返回，实际应用中可加入处理 */
-         return -1;
-     }
-     flash_converter.f= g_tVar.P03;
-     DATA_32[0]=flash_converter.u;
-     flash_converter.f= g_tVar.P04;
-     DATA_32[1]=flash_converter.u;
-     flash_converter.f= g_tVar.P05;
-     DATA_32[2]=flash_converter.u;
-     flash_converter.f= g_tVar.P06;
-     DATA_32[3]=flash_converter.u;
-     flash_converter.f= g_tVar.P14;
-     DATA_32[4]=flash_converter.u;
-     flash_converter.f= g_tVar.P15;
-     DATA_32[5]=flash_converter.u;
-     flash_converter.f= g_tVar.P16;
-     DATA_32[6]=flash_converter.u;
-     flash_converter.f= g_tVar.P17;
-     DATA_32[7]=flash_converter.u;
-     flash_converter.f= g_tVar.P18;
-     DATA_32[8]=flash_converter.u;
-     flash_converter.f= g_tVar.P19;
-     DATA_32[9]=flash_converter.u;  
-     flash_converter.f= g_tVar.P20;
-     DATA_32[10]=flash_converter.u;
-     flash_converter.f= g_tVar.P21;
-     DATA_32[11]=flash_converter.u;
+// ========================== Sensor accessors by channel (ch=0 or 1) ==========================
+#define S(ch) ((ch) == 0 ? &g_tVar.S1 : &g_tVar.S2)
 
+float Var_Read_SensorLiveNox(uint8_t ch) { float r; LOCK_VAR(); r = S(ch)->live_nox; UNLOCK_VAR(); return r; }
+float Var_Read_SensorLiveO2(uint8_t ch)  { float r; LOCK_VAR(); r = S(ch)->live_o2;  UNLOCK_VAR(); return r; }
+uint16_t Var_Read_SensorStatus(uint8_t ch) { uint16_t r; LOCK_VAR(); r = S(ch)->status; UNLOCK_VAR(); return r; }
+void Var_Write_SensorLiveNox(uint8_t ch, float v) { LOCK_VAR(); S(ch)->live_nox = v; UNLOCK_VAR(); }
+void Var_Write_SensorLiveO2(uint8_t ch, float v)  { LOCK_VAR(); S(ch)->live_o2 = v;  UNLOCK_VAR(); }
+void Var_Write_SensorStatus(uint8_t ch, uint16_t v) { LOCK_VAR(); S(ch)->status = v; UNLOCK_VAR(); }
 
-     /* 向内部FLASH写入数据 */
-     Address = FLASH_USER_START_ADDR;
-     for (int i=0;i<12;i++){
-       if (Address < FLASH_USER_END_ADDR) {
-         if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, Address, DATA_32[i])
-             == HAL_OK) {
-             Address = Address + 4;
-         } else {
-             /*写入出错，返回，实际应用中可加入处理
-             */
-             return -1;
-         }
-        }
-     }
+float Var_Read_SensorSeg1NoxA(uint8_t ch) { float r; LOCK_VAR(); r = S(ch)->seg1_nox_a; UNLOCK_VAR(); return r; }
+float Var_Read_SensorSeg1NoxB(uint8_t ch) { float r; LOCK_VAR(); r = S(ch)->seg1_nox_b; UNLOCK_VAR(); return r; }
+float Var_Read_SensorSeg1O2A(uint8_t ch)  { float r; LOCK_VAR(); r = S(ch)->seg1_o2_a;  UNLOCK_VAR(); return r; }
+float Var_Read_SensorSeg1O2B(uint8_t ch)  { float r; LOCK_VAR(); r = S(ch)->seg1_o2_b;  UNLOCK_VAR(); return r; }
+void Var_Write_SensorSeg1NoxA(uint8_t ch, float v) { LOCK_VAR(); S(ch)->seg1_nox_a = v; UNLOCK_VAR(); }
+void Var_Write_SensorSeg1NoxB(uint8_t ch, float v) { LOCK_VAR(); S(ch)->seg1_nox_b = v; UNLOCK_VAR(); }
+void Var_Write_SensorSeg1O2A(uint8_t ch, float v)  { LOCK_VAR(); S(ch)->seg1_o2_a = v;  UNLOCK_VAR(); }
+void Var_Write_SensorSeg1O2B(uint8_t ch, float v)  { LOCK_VAR(); S(ch)->seg1_o2_b = v;  UNLOCK_VAR(); }
 
-     HAL_FLASH_Lock();
+float Var_Read_SensorSeg2NoxA(uint8_t ch) { float r; LOCK_VAR(); r = S(ch)->seg2_nox_a; UNLOCK_VAR(); return r; }
+float Var_Read_SensorSeg2NoxB(uint8_t ch) { float r; LOCK_VAR(); r = S(ch)->seg2_nox_b; UNLOCK_VAR(); return r; }
+float Var_Read_SensorSeg2O2A(uint8_t ch)  { float r; LOCK_VAR(); r = S(ch)->seg2_o2_a;  UNLOCK_VAR(); return r; }
+float Var_Read_SensorSeg2O2B(uint8_t ch)  { float r; LOCK_VAR(); r = S(ch)->seg2_o2_b;  UNLOCK_VAR(); return r; }
+void Var_Write_SensorSeg2NoxA(uint8_t ch, float v) { LOCK_VAR(); S(ch)->seg2_nox_a = v; UNLOCK_VAR(); }
+void Var_Write_SensorSeg2NoxB(uint8_t ch, float v) { LOCK_VAR(); S(ch)->seg2_nox_b = v; UNLOCK_VAR(); }
+void Var_Write_SensorSeg2O2A(uint8_t ch, float v)  { LOCK_VAR(); S(ch)->seg2_o2_a = v;  UNLOCK_VAR(); }
+void Var_Write_SensorSeg2O2B(uint8_t ch, float v)  { LOCK_VAR(); S(ch)->seg2_o2_b = v;  UNLOCK_VAR(); }
 
-     /* 检查写入的数据是否正确 */
-     Address = FLASH_USER_START_ADDR;
-     int j=0;
-     while ((Address < FLASH_USER_END_ADDR) && (MemoryProgramStatus !=
-         0)) {
-         if ((*(__IO uint32_t*) Address) != DATA_32[j]) {
-             MemoryProgramStatus = 0;
-         }
-         Address += 4;
-         ++j;
-     }
-     return MemoryProgramStatus;
- }
+float Var_Read_SensorP2Nox(uint8_t ch) { float r; LOCK_VAR(); r = S(ch)->p2_nox; UNLOCK_VAR(); return r; }
+float Var_Read_SensorP2O2(uint8_t ch)  { float r; LOCK_VAR(); r = S(ch)->p2_o2;  UNLOCK_VAR(); return r; }
+float Var_Read_SensorP3Nox(uint8_t ch) { float r; LOCK_VAR(); r = S(ch)->p3_nox; UNLOCK_VAR(); return r; }
+float Var_Read_SensorP3O2(uint8_t ch)  { float r; LOCK_VAR(); r = S(ch)->p3_o2;  UNLOCK_VAR(); return r; }
+void Var_Write_SensorP2Nox(uint8_t ch, float v) { LOCK_VAR(); S(ch)->p2_nox = v; UNLOCK_VAR(); }
+void Var_Write_SensorP2O2(uint8_t ch, float v)  { LOCK_VAR(); S(ch)->p2_o2 = v;  UNLOCK_VAR(); }
+void Var_Write_SensorP3Nox(uint8_t ch, float v) { LOCK_VAR(); S(ch)->p3_nox = v; UNLOCK_VAR(); }
+void Var_Write_SensorP3O2(uint8_t ch, float v)  { LOCK_VAR(); S(ch)->p3_o2 = v;  UNLOCK_VAR(); }
 
+uint16_t Var_Read_SensorNoxCalTrig(uint8_t ch) { uint16_t r; LOCK_VAR(); r = S(ch)->nox_cal_trig; UNLOCK_VAR(); return r; }
+uint16_t Var_Read_SensorNoxPtSel(uint8_t ch)   { uint16_t r; LOCK_VAR(); r = S(ch)->nox_pt_sel;   UNLOCK_VAR(); return r; }
+uint16_t Var_Read_SensorO2CalTrig(uint8_t ch)  { uint16_t r; LOCK_VAR(); r = S(ch)->o2_cal_trig;  UNLOCK_VAR(); return r; }
+uint16_t Var_Read_SensorO2PtSel(uint8_t ch)    { uint16_t r; LOCK_VAR(); r = S(ch)->o2_pt_sel;    UNLOCK_VAR(); return r; }
+void Var_Write_SensorNoxCalTrig(uint8_t ch, uint16_t v) { LOCK_VAR(); S(ch)->nox_cal_trig = v; UNLOCK_VAR(); }
+void Var_Write_SensorNoxPtSel(uint8_t ch, uint16_t v)   { LOCK_VAR(); S(ch)->nox_pt_sel = v;   UNLOCK_VAR(); }
+void Var_Write_SensorO2CalTrig(uint8_t ch, uint16_t v)  { LOCK_VAR(); S(ch)->o2_cal_trig = v;  UNLOCK_VAR(); }
+void Var_Write_SensorO2PtSel(uint8_t ch, uint16_t v)    { LOCK_VAR(); S(ch)->o2_pt_sel = v;    UNLOCK_VAR(); }
 
- 
-void LoadRegistersFromFlash(void) {
-    uint32_t Address = FLASH_USER_START_ADDR;
+uint16_t Var_Read_SensorBlowInterval(uint8_t ch)   { uint16_t r; LOCK_VAR(); r = S(ch)->blow_interval;   UNLOCK_VAR(); return r; }
+uint16_t Var_Read_SensorBlowDuration(uint8_t ch)   { uint16_t r; LOCK_VAR(); r = S(ch)->blow_duration;   UNLOCK_VAR(); return r; }
+uint16_t Var_Read_SensorBlowStatus(uint8_t ch)    { uint16_t r; LOCK_VAR(); r = S(ch)->blow_status;    UNLOCK_VAR(); return r; }
+uint16_t Var_Read_SensorBlowCountdown(uint8_t ch) { uint16_t r; LOCK_VAR(); r = S(ch)->blow_countdown; UNLOCK_VAR(); return r; }
+uint16_t Var_Read_SensorBlowCmd(uint8_t ch)       { uint16_t r; LOCK_VAR(); r = S(ch)->blow_cmd;       UNLOCK_VAR(); return r; }
+void Var_Write_SensorBlowInterval(uint8_t ch, uint16_t v)   { LOCK_VAR(); S(ch)->blow_interval = v;   UNLOCK_VAR(); }
+void Var_Write_SensorBlowDuration(uint8_t ch, uint16_t v)   { LOCK_VAR(); S(ch)->blow_duration = v;   UNLOCK_VAR(); }
+void Var_Write_SensorBlowCmd(uint8_t ch, uint16_t v)       { LOCK_VAR(); S(ch)->blow_cmd = v;       UNLOCK_VAR(); }
 
-   //14~21 3~6  标定点和斜率
-   flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P03=  flash_converter.f;
-   Address += 4;   
-   flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P04=  flash_converter.f;
-   Address += 4;
-    flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P05=  flash_converter.f;
-   Address += 4;
-    flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P06=  flash_converter.f;
-   Address += 4;   
-   flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P14 = flash_converter.f;
-   Address += 4;
-   flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P15 = flash_converter.f;
-   Address += 4;
-   flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P16 = flash_converter.f;
-   Address += 4;
-   flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P17 = flash_converter.f;
-   Address += 4;
-   flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P18 = flash_converter.f;
-   Address += 4;
-   flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P19 = flash_converter.f;
-   Address += 4;
-   flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P20 = flash_converter.f;
-   Address += 4;
-   flash_converter.u=*(uint32_t *)Address;
-   g_tVar.P21 = flash_converter.f;
-   Address += 4;
+#undef S
 
-   
+void Var_Read_BlowbackCfg(uint16_t *p24, uint16_t *p25) {
+    LOCK_VAR();
+    if (p24) *p24 = g_tVar.S1.blow_interval;
+    if (p25) *p25 = g_tVar.S1.blow_duration;
+    UNLOCK_VAR();
 }
 
-
-// ========================== 线圈寄存器（D系列）实现 ==========================
-void Var_Write_D01(uint16_t value) {
+void Var_Read_AlarmCfg(float *p12, float *p13) {
     LOCK_VAR();
-    g_tVar.D01 = value;
+    if (p12) *p12 = g_tVar.P12;
+    if (p13) *p13 = g_tVar.P13;
     UNLOCK_VAR();
-}
-uint16_t Var_Read_D01(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.D01;
-    UNLOCK_VAR();
-    return ret;
 }
 
-void Var_Write_D02(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.D02 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_D02(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.D02;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_D03(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.D03 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_D03(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.D03;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_D04(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.D04 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_D04(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.D04;
-    UNLOCK_VAR();
-    return ret;
-}
-
-// ========================== 保持寄存器-只读（P01~P07/P14~P17）实现 ==========================
-float Var_Read_P01(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P01;
-    UNLOCK_VAR();
-    return ret;
-}
-
-float Var_Read_P02(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P02;
-    UNLOCK_VAR();
-    return ret;
-}
-
-float Var_Read_P03(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P03;
-    UNLOCK_VAR();
-    return ret;
-}
-
-float Var_Read_P04(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P04;
-    UNLOCK_VAR();
-    return ret;
-}
-
-float Var_Read_P05(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P05;
-    UNLOCK_VAR();
-    return ret;
-}
-
-float Var_Read_P06(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P06;
-    UNLOCK_VAR();
-    return ret;
-}
-
-uint16_t Var_Read_P07(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.P07;
-    UNLOCK_VAR();
-    return ret;
-}
-
-float Var_Read_P14(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P14;
-    UNLOCK_VAR();
-    return ret;
-}
-
-float Var_Read_P15(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P15;
-    UNLOCK_VAR();
-    return ret;
-}
-
-float Var_Read_P16(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P16;
-    UNLOCK_VAR();
-    return ret;
-}
-
-float Var_Read_P17(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P17;
-    UNLOCK_VAR();
-    return ret;
-}
-
-// ========================== 保持寄存器-读写（P08~P13/P18~P25）实现 ==========================
-void Var_Write_P08(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.P08 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_P08(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.P08;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P09(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.P09 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_P09(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.P09;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P10(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.P10 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_P10(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.P10;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P11(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.P11 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_P11(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.P11;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P12(float value) {
-    LOCK_VAR();
-    g_tVar.P12 = value;
-    UNLOCK_VAR();
-}
-float Var_Read_P12(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P12;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P13(float value) {
-    LOCK_VAR();
-    g_tVar.P13 = value;
-    UNLOCK_VAR();
-}
-float Var_Read_P13(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P13;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P18(float value) {
-    LOCK_VAR();
-    g_tVar.P18 = value;
-    UNLOCK_VAR();
-}
-float Var_Read_P18(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P18;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P19(float value) {
-    LOCK_VAR();
-    g_tVar.P19 = value;
-    UNLOCK_VAR();
-}
-float Var_Read_P19(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P19;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P20(float value) {
-    LOCK_VAR();
-    g_tVar.P20 = value;
-    UNLOCK_VAR();
-}
-float Var_Read_P20(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P20;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P21(float value) {
-    LOCK_VAR();
-    g_tVar.P21 = value;
-    UNLOCK_VAR();
-}
-float Var_Read_P21(void) {
-    float ret;
-    LOCK_VAR();
-    ret = g_tVar.P21;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P22(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.P22 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_P22(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.P22;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P23(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.P23 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_P23(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.P23;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P24(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.P24 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_P24(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.P24;
-    UNLOCK_VAR();
-    return ret;
-}
-
-void Var_Write_P25(uint16_t value) {
-    LOCK_VAR();
-    g_tVar.P25 = value;
-    UNLOCK_VAR();
-}
-uint16_t Var_Read_P25(void) {
-    uint16_t ret;
-    LOCK_VAR();
-    ret = g_tVar.P25;
-    UNLOCK_VAR();
-    return ret;
-}
-
-// ========================== 批量操作接口（减少锁的获取/释放次数） ==========================
+// ========================== ???/??????? P01/P02=NOx/O?, P07=?? ==========================
 void Var_Update_SensorCore(float nox, float o2, uint16_t state) {
     LOCK_VAR();
     g_tVar.P01 = nox;
@@ -1894,47 +1194,8 @@ void Var_Update_SensorCore(float nox, float o2, uint16_t state) {
     UNLOCK_VAR();
 }
 
-void Var_Update_ParamSection1(float p03, float p04, float p05, float p06) {
-    LOCK_VAR();
-    g_tVar.P03 = p03;
-    g_tVar.P04 = p04;
-    g_tVar.P14 = p05;
-    g_tVar.P15 = p06;
-    UNLOCK_VAR();
-}
-extern void Var_Read_ParamSection1(float* p03, float* p04, float* p14, float* p15){
-    LOCK_VAR();
-    *p03 = g_tVar.P03;
-    *p04 = g_tVar.P04;
-    *p14 = g_tVar.P14;
-    *p15 = g_tVar.P15;
-    UNLOCK_VAR();
-
-}
-void Var_Update_ParamSection2(float p05, float p06, float p16, float p17) {
-    LOCK_VAR();
-    g_tVar.P05 = p05;
-    g_tVar.P06 = p06;
-    g_tVar.P16 = p16;
-    g_tVar.P17 = p17;
-    UNLOCK_VAR();
-}
-extern void Var_Read_ParamSection2(float* p05, float* p06, float* p16, float* p17){
-    LOCK_VAR();
-    *p05 = g_tVar.P05;
-    *p06 = g_tVar.P06;
-    *p16 = g_tVar.P16;
-    *p17 = g_tVar.P17;
-    UNLOCK_VAR();
-}
 void Var_Update_CalibPoint(float p18, float p19, float p20, float p21) {
-    LOCK_VAR();
-    g_tVar.P18 = p18;
-    g_tVar.P19 = p19;
-    g_tVar.P20 = p20;
-    g_tVar.P21 = p21;
-    UNLOCK_VAR();
+    (void)p18; (void)p19; (void)p20; (void)p21;
 }
-
 
 /*****************************  (END OF FILE) *********************************/

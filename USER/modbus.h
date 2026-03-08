@@ -6,21 +6,21 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-//slave
+/* Slave: USART1, TIM2 for RX timeout */
 #define RX_TIMER htim2
 #define MDSUARTx  huart1
 #define MODBUSUART   USART1
 #define RS485_EN_PORT RS485_RE_GPIO_Port
 #define RS485_EN_PIN RS485_RE_Pin
 
-//host
+/* Host: UART5, TIM3 for RX timeout */
 #define RX_TIMER_H htim3
 #define MDSUARTxH  huart5
 #define MODBUSUARTH   UART5
 #define RS485_EN_PORT_H RS485_RE_GPIO_Port
 #define RS485_EN_PIN_H RS485_RE_Pin
 
-//485״̬
+/* RS485 direction state */
 typedef struct {
     uint8_t isSending;
 } RS485_State_t;

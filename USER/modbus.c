@@ -1,9 +1,13 @@
+/**
+ * @file    modbus.c
+ * @brief   Modbus RTU common: CRC16 tables, BEBufToUint16, RS485 direction control, UART TX/RX callbacks.
+ *          Baud rate table for 3.5 character timeout; shared by slave (USART1) and host (UART5).
+ */
 #include "modbus.h"
 #include "modbus_slave.h"
 #include "modbus_host.h"
 
-
-// CRC 高位字节值表
+/* CRC-16 (Modbus) high byte lookup table */
 const uint8_t s_CRCHi[] = {
     0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
     0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,

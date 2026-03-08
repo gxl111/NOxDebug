@@ -603,21 +603,20 @@ void WritetoSD(char filename[], BYTE write_buff[], uint8_t bufSize)
 // 读取配置文件并解析参数
 FRESULT readConfig(const char* filename, SystemConfig* config) {
     FIL file;
-    //FRESULT res;
     char sdbuffer[32];
     char key[32], value[32];
     
     FATFS fs;
-	uint8_t res=0;
-	
+    uint8_t sd_res = 0;
+    FRESULT res;
 
-	res = SD_init();		//SD卡初始化
+    sd_res = SD_init();		//SD卡初始化
 	
-	if(res == 1)
+	if (sd_res == 1)
 	{
         OLED_PrintASCIIString(0, 30, "sd init failed", &afont16x8, OLED_COLOR_NORMAL);
         OLED_ShowFrame();
-        return res;
+        return FR_NOT_READY;
 	}
 	else
 	{
@@ -625,7 +624,7 @@ FRESULT readConfig(const char* filename, SystemConfig* config) {
         OLED_ShowFrame();		
 	}
 	
-	res=f_mount(&fs,"0:",1);		//挂载
+	res = f_mount(&fs, "0:", 1);		//挂载
 	if (res == FR_NO_FILESYSTEM)
     {
         OLED_PrintASCIIString(0, 30, "No Filesystem!", &afont16x8, OLED_COLOR_NORMAL);
@@ -641,7 +640,7 @@ FRESULT readConfig(const char* filename, SystemConfig* config) {
 
 
     res = f_open(&file, filename, FA_READ);
-    if(res != FR_OK) return res;
+    if (res != FR_OK) return res;
 
     while(f_gets(sdbuffer, sizeof(sdbuffer), &file)) {
         if(sscanf(sdbuffer, "%31[^=]=%31s", key, value) == 2) {
@@ -695,7 +694,6 @@ FIL file;
 FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newValue) {
     
     FRESULT res;
-    FATFS fs;
     static uint32_t n=0;
     char tmpName[] = "temp.txt";  // 临时文件名
     

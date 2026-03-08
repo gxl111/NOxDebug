@@ -1,5 +1,5 @@
-#ifndef __MOSBUS_HOST_H
-#define __MOSBUS_HOST_H
+#ifndef __MODBUS_HOST_H
+#define __MODBUS_HOST_H
 
 #include "FreeRTOS.h"
 #include "semphr.h"
@@ -32,18 +32,14 @@ typedef struct
 	uint8_t TxBuf[H_TX_BUF_SIZE];
 	uint8_t TxCount;
 	
-	uint16_t Reg01H;		/* 保存主机发送的寄存器首地址 */
+	uint16_t Reg01H;		/* Host-sent register start address */
 	uint16_t Reg02H;
 	uint16_t Reg03H;		
 	uint16_t Reg04H;
 
-	uint8_t RegNum;			/* 寄存器个数 */
+	uint8_t RegNum;			/* Number of registers */
 
-//	uint8_t fAck01H;		/* 应答命令标志 0 表示执行失败 1表示执行成功 */
-//	uint8_t fAck02H;
 	uint8_t fAck03H;
-//	uint8_t fAck04H;
-//	uint8_t fAck05H;		
 	uint8_t fAck06H;		
 	uint8_t fAck10H;
 	
@@ -60,7 +56,7 @@ typedef struct
 }VAR_T_H;
 
 extern VAR_T_H g_tVar_h;
-//存电流输出数据
+//????????????
 extern uint8_t electricity_data_buf[4];
 
 extern SemaphoreHandle_t RS485send_SemaphoreHandle;
@@ -80,5 +76,7 @@ extern void MODH_ReciveNew(uint8_t _data);
 
 extern void MODH_Send06H(uint8_t _addr, uint16_t _reg, uint16_t _value);
 
+/* RS485 host: send buffer via UART5 with direction pin (used by MODH_SendWithCRC) */
+extern void RS485_Send_Data_IT_H(uint8_t *pData, uint16_t Size);
 
 #endif

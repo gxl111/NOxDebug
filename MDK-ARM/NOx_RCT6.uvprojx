@@ -718,6 +718,16 @@
           <GroupName>USER</GroupName>
           <Files>
             <File>
+              <FileName>nox_sensor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\nox_sensor.c</FilePath>
+            </File>
+            <File>
+              <FileName>nox_channel.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\nox_channel.c</FilePath>
+            </File>
+            <File>
               <FileName>J1939.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\USER\J1939.c</FilePath>
@@ -728,9 +738,29 @@
               <FilePath>..\USER\modbus_slave.c</FilePath>
             </File>
             <File>
+              <FileName>modbus_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\modbus_flash.c</FilePath>
+            </File>
+            <File>
               <FileName>NOx.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\USER\NOx.c</FilePath>
+            </File>
+            <File>
+              <FileName>blowback.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\blowback.c</FilePath>
+            </File>
+            <File>
+              <FileName>calibration.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\calibration.c</FilePath>
+            </File>
+            <File>
+              <FileName>alarm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\alarm.c</FilePath>
             </File>
             <File>
               <FileName>sdcard.c</FileName>
