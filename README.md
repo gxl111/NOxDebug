@@ -7,8 +7,8 @@
 **Main capabilities:**
 
 - Receive NOx and O₂ data from **one or two** J1939-capable sensors: **SA 0x52** (channel 0, outlet) and **SA 0x51** (channel 1, inlet). Architecture is modular for future extension to three sensors.
-- **Work mode** (P34): **0** = single (only ch0); **1** = primary-backup (use first valid channel); **2** = fusion (average of all valid channels). A single **4–20 mA** output is driven by the current strategy result (NOx + O₂).
-- **Modbus register layout:** **Common** registers only: NOx/O₂ output (P01/P02), 4–20 mA (P22/P23), work mode (P34), alarm thresholds (P12/P13). **Sensor registers:** two identical blocks (sensor 1: 40013–40050, sensor 2: 40051–40088), each with live NOx/O₂/status, calibration params, cal control, and blowback. No global “cal target”; each sensor’s cal trigger applies to that sensor.
+- **Work mode** (register 40012 / P34): **Low byte** = mode: **0** = single (one channel), **1** = primary-backup (first valid channel), **2** = fusion (average of valid channels). **High byte** = single-channel index when mode=0: **0** = channel 0 (SA 0x52), **256 (0x0100)** = channel 1 (SA 0x51). Default mode is **primary-backup**. A single **4–20 mA** output is driven by the current strategy result (NOx + O₂).
+- **Modbus register layout:** **Common** registers: NOx/O₂ output (P01/P02), output status (P07), 4–20 mA (P22/P23), work mode (P34), alarm thresholds (P12/P13). **Sensor registers:** two identical blocks (sensor 1: 40013–40050, sensor 2: 40051–40088), each with live NOx/O₂/status, calibration params, cal control, and blowback. No global “cal target”; each sensor’s cal trigger applies to that sensor.
 - Per-sensor two-segment linear calibration (3 points) for NOx and O₂; each channel has its own parameters and cal trigger/point select in its sensor block. Store calibration in internal Flash (S1 + S2 = 24 floats).
 - Modbus RTU **slave** on RS485 (USART1) for HMI/SCADA: read/write registers and coils.
 - Modbus RTU **master** on another RS485 (UART5) to drive an external 4–20 mA output module.
@@ -40,7 +40,7 @@ Pin names and labels are defined in the CubeMX project (`NOx_RCT6.ioc`) and in `
   - **defaultTask**: placeholder.
 - **NOx_Default**: calibration polling (per sensor via each sensor’s cal trigger), alarm, blowback logic (both valves), run-time display, OLED refresh.
 - **ModBus_Slave**: Modbus slave poll (USART1), register and Flash access.
-- **NOx_Receive**: dequeue J1939 frames (with channel index 0/1), update per-channel data (**nox_channel**), apply work-mode strategy, update P01/P02/P07 and per-sensor live registers (S1/S2), fill 4–20 mA buffer, send heater command on CAN.
+- **NOx_Receive**: dequeue J1939 frames (with channel index 0/1), update per-channel data (**nox_channel**), apply work-mode strategy (single / primary-backup / fusion; single channel selectable via P34 high byte), update P01/P02/P07 and per-sensor live registers (S1/S2), fill 4–20 mA buffer, send heater command on CAN.
   - **ModBus_Host**: periodically write 4–20 mA data to external slave (UART5) and read back for check.
 
 - **Timers:** TIM6 (HAL tick), TIM7 (10 ms base for 100 ms / 1 s counters), TIM2/TIM3 (Modbus slave/host RX timeout).
@@ -92,7 +92,7 @@ Register layout: **common** (output, 4–20 mA, mode, alarm only), then **sensor
 | 40008–40009 | P13 | R/W | O₂ low alarm, float |
 | 40010 | P22 | R/W | 4–20 mA NOx code (written by host) |
 | 40011 | P23 | R/W | 4–20 mA O₂ code (written by host) |
-| 40012 | P34 | R/W | **Work mode:** 0 = single (ch0), 1 = primary-backup, 2 = fusion |
+| 40012 | P34 | R/W | **Work mode (u16):** low byte 0=single, 1=primary-backup, 2=fusion; when single, high byte=channel (0=ch0, 256=ch1). Default 1. |
 
 ### 5.2 Sensor Block (same for sensor 1 and sensor 2)
 
@@ -183,10 +183,13 @@ Example: set 40046 = 3600, 40047 = 60 for sensor 1 “blow 60 s every 3600 s”.
 
 ### 6.6 Work Mode (Dual-Sensor Strategy)
 
-- **P34** = work mode (R/W):  
-  - **0** = **Single:** only channel 0 (SA 0x52) is used for P01/P02/P07 and 4–20 mA. Backward compatible with one sensor.  
-  - **1** = **Primary-backup:** use the first valid channel (0 then 1). If the current channel faults or is in blowback, the other channel is used automatically.  
-  - **2** = **Fusion:** average NOx and O₂ over all valid channels; status from last valid. Higher effective accuracy when both sensors are healthy.
+- **Register 40012 (P34)** = work mode (R/W), 16-bit:
+  - **Low byte (mode):**
+    - **0** = **Single:** one channel drives P01/P02/P07 and 4–20 mA. Which channel is selected by the **high byte**: **0** = channel 0 (SA 0x52), **256 (0x0100)** = channel 1 (SA 0x51). Example: write **0** for single ch0, write **256** for single ch1.
+    - **1** = **Primary-backup (default):** use the first **valid** channel (0 then 1). If one channel is heating or fault (invalid), the other valid channel is used automatically. Both sensors’ data remain visible in their sensor blocks.
+    - **2** = **Fusion:** average NOx and O₂ over all valid channels; status from last valid. Higher effective accuracy when both sensors are healthy.
+
+- **Default at power-up / after Register_Init:** P34 = **1** (primary-backup). Manual write to 40012 takes effect on the next strategy cycle (~50 ms).
 
 - The **single 4–20 mA** output always reflects the current strategy result (P01/P02 = NOx and O₂). Per-sensor values are in each sensor block’s live registers for display or logging.
 
@@ -202,6 +205,7 @@ Example: set 40046 = 3600, 40047 = 60 for sensor 1 “blow 60 s every 3600 s”.
 
 ### 6.9 Changing Defaults
 
+- **Work mode default** is set in **USER/NOx.c** in **Register_Init()**: `g_tVar.work_mode = 1` (primary-backup). Change to `0` for single ch0 or `256` for single ch1 if needed.
 - Edit **USER/app_config.h** for:
   - **NOX_SENSOR_COUNT** (currently 2), **NOX_SENSOR_COUNT_MAX** (3 for future), **NOX_SENSOR_SA_LIST**.
   - Default NOx/O₂ conversion (slope/intercept), calibration Y values, alarm thresholds.
@@ -250,4 +254,4 @@ Example: set 40046 = 3600, 40047 = 60 for sensor 1 “blow 60 s every 3600 s”.
 
 ---
 
-*NOxDebug – NOx sensor monitor and debug system. Supports single or dual sensors (SA 0x52 / 0x51) with configurable work mode and per-sensor calibration. Common Modbus registers: NOx/O₂ output, 4–20 mA, mode, alarm; sensor registers are symmetric (same count and layout for both). For register details and source-level behaviour, see the code and comments in USER/ and app_config.h.*
+*NOxDebug – NOx sensor monitor and debug system. Supports single or dual sensors (SA 0x52 / 0x51) with configurable work mode (single with channel select, primary-backup, fusion) and per-sensor calibration. Default mode is primary-backup. Common Modbus registers: NOx/O₂ output, output status, 4–20 mA, mode, alarm; sensor registers are symmetric (same count and layout for both). For register details and source-level behaviour, see the code and comments in USER/ and app_config.h.*
