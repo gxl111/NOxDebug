@@ -47,6 +47,9 @@ uint8_t NoxChannel_IsValid(uint8_t ch_index);
 /** Set work mode (called from NOx.c after reading P34). */
 void NoxChannel_SetWorkMode(NoxWorkMode_t mode);
 
+/** Set single-channel index (0 or 1). Only used when work mode is SINGLE. */
+void NoxChannel_SetSingleChannelIndex(uint8_t ch_index);
+
 /**
  * Compute current output from all channels according to current work mode.
  * Single: ch0 only; Primary_backup: first valid; Fusion: average of valid.

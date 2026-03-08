@@ -40,7 +40,7 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_ALARM_O2_LO     40008   /* 报警 O2 低限 (float, 2 regs) */
 #define SLAVE_REG_MA_NOX          40010   /* 4-20mA NOx 码 (u16) */
 #define SLAVE_REG_MA_O2           40011   /* 4-20mA O2 码 (u16) */
-#define SLAVE_REG_WORK_MODE       40012   /* 工作模式 0=单路 1=主备 2=融合 (u16) */
+#define SLAVE_REG_WORK_MODE       40012   /* 工作模式 (u16): 低字节 0=单路 1=主备 2=融合；单路时高字节=通道 0/1，如 0x0100 表示通道1 */
 #define COMMON_REG_END            40012   /* 通用结束地址 */
 
 /* ==================== 传感器块（两路完全一致，每块 38 个寄存器地址） ==================== */
@@ -174,8 +174,9 @@ extern void Var_Write_MaNox(uint16_t value);
 extern uint16_t Var_Read_MaNox(void);
 extern void Var_Write_MaO2(uint16_t value);
 extern uint16_t Var_Read_MaO2(void);
-extern void Var_Write_WorkMode(uint16_t value);
-extern uint16_t Var_Read_WorkMode(void);
+/** P34: low byte = work mode (0/1/2), high byte = single-channel index (0 or 1) when mode=0.
+ *  Single ch0: P34=0, single ch1: P34=0x0100 (256). */
+extern uint8_t Var_Read_SingleChannelIndex(void);
 
 /* 传感器寄存器：按通道 ch=0 或 1 访问，两路寄存器数量与功能一致 */
 extern float  Var_Read_SensorLiveNox(uint8_t ch);

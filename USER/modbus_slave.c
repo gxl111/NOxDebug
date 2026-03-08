@@ -1121,7 +1121,8 @@ uint16_t Var_Read_MaNox(void) { uint16_t r; VAR_READ_U16(P22, r); return r; }
 void Var_Write_MaO2(uint16_t value) { VAR_WRITE_U16(P23, value); }
 uint16_t Var_Read_MaO2(void) { uint16_t r; VAR_READ_U16(P23, r); return r; }
 void Var_Write_WorkMode(uint16_t value) { VAR_WRITE_U16(P34, value); }
-uint16_t Var_Read_WorkMode(void) { uint16_t r; VAR_READ_U16(P34, r); return r; }
+uint16_t Var_Read_WorkMode(void) { uint16_t r; VAR_READ_U16(P34, r); return (uint16_t)(r & 0x03u); }
+uint8_t Var_Read_SingleChannelIndex(void) { uint16_t r; VAR_READ_U16(P34, r); return (uint8_t)((r >> 8) & 1u); }
 
 // ========================== Sensor accessors by channel (ch=0 or 1) ==========================
 #define S(ch) ((ch) == 0 ? &g_tVar.S1 : &g_tVar.S2)

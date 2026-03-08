@@ -83,11 +83,13 @@ void NOxReceive(void *argument)
             NOx_HandleOne(&item.msg, item.channel_index);
         }
 
-        /* Work mode from P34 (0=single, 1=primary_backup, 2=fusion). */
+        /* Work mode and single-channel index from P34 (0=single, 1=primary_backup, 2=fusion;
+         * when single: P34 high byte = channel 0 or 1, e.g. 0=ch0, 0x0100=ch1). */
         {
             uint16_t mode_u = Var_Read_WorkMode();
             if (mode_u <= (uint16_t)NOX_MODE_FUSION)
                 NoxChannel_SetWorkMode((NoxWorkMode_t)mode_u);
+            NoxChannel_SetSingleChannelIndex(Var_Read_SingleChannelIndex());
         }
 
         /* Current output for P01/P02(P07) and single 4-20mA: NOx and O2 from strategy. */
@@ -102,20 +104,25 @@ void NOxReceive(void *argument)
             NoxSensor_To4_20mA(nox_out, o2_out, electricity_data_buf);
         }
 
-        /* OLED: show two sensors + current output and state. */
+        /* OLED: show two sensors + current output and state (all 8x6). */
         {
             uint8_t buf[28];
             float n1 = Var_Read_SensorLiveNox(0), o1 = Var_Read_SensorLiveO2(0);
             float n2 = Var_Read_SensorLiveNox(1), o2 = Var_Read_SensorLiveO2(1);
+            uint16_t st1 = Var_Read_SensorStatus(0), st2 = Var_Read_SensorStatus(1);
             snprintf((char *)buf, sizeof(buf), "S1 NOx %5.2f O2 %5.2f%%", (double)n1, (double)o1);
-            OLED_PrintASCIIString(0, 10, (char *)buf, &afont16x8, OLED_COLOR_NORMAL);
+            OLED_PrintASCIIString(0, 10, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
+            snprintf((char *)buf, sizeof(buf), "S1 state: %u", (unsigned)st1);
+            OLED_PrintASCIIString(0, 18, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
             snprintf((char *)buf, sizeof(buf), "S2 NOx %5.2f O2 %5.2f%%", (double)n2, (double)o2);
-            OLED_PrintASCIIString(0, 22, (char *)buf, &afont16x8, OLED_COLOR_NORMAL);
+            OLED_PrintASCIIString(0, 26, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
+            snprintf((char *)buf, sizeof(buf), "S2 state: %u", (unsigned)st2);
+            OLED_PrintASCIIString(0, 34, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
             snprintf((char *)buf, sizeof(buf), "Out NOx %5.2f O2 %5.2f%%", (double)NOx_ppm, (double)O2_pct);
-            OLED_PrintASCIIString(0, 34, (char *)buf, &afont16x8, OLED_COLOR_NORMAL);
+            OLED_PrintASCIIString(0, 42, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
             snprintf((char *)buf, sizeof(buf), "state: %u", (unsigned)Var_Read_OutputChStatus());
             OLED_ColorMode c = (Var_Read_OutputChStatus() == 0x1FFu) ? OLED_COLOR_NORMAL : OLED_COLOR_REVERSED;
-            OLED_PrintASCIIString(0, 46, (char *)buf, &afont16x8, c);
+            OLED_PrintASCIIString(0, 50, (char *)buf, &afont8x6, c);
         }
 
         /* Heater command: one frame for both sensors (Byte7 = 0x55 for both banks). */
@@ -132,7 +139,7 @@ void NOxDefault(void *argument)
     Blowback_Init();
 
     for (;;) {
-        /* 整段标定只持锁一次，内部 Var_Read_* 用递归 mutex 直接通过，避免阻塞时挂入 list 导致卡死 */
+        /* ???α????????Σ???? Var_Read_* ?????? mutex ????????????????????? list ??????? */
         LOCK_VAR();
         Calibration_NOx(&NOx_parameter, &NOx_parameter1);
         Calibration_O2(&O2_parameter, &O2_parameter1);
@@ -195,7 +202,7 @@ void Register_Init(void)
     g_tVar.S1.blow_countdown = (uint16_t)(Blowback_GetInterval() > 0u ? Blowback_GetInterval() : 0u);
     g_tVar.S2.blow_status = 0u;
     g_tVar.S2.blow_countdown = (uint16_t)(Blowback_GetIntervalCh1() > 0u ? Blowback_GetIntervalCh1() : 0u);
-    g_tVar.P34 = 0u;
+    g_tVar.P34 = 1u;   /* default: primary-backup */
     UNLOCK_VAR();
 }
 

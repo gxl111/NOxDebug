@@ -10,7 +10,8 @@
 /* Source addresses: [0]=outlet 0x52, [1]=inlet 0x51 (see Electrical Interface doc). */
 static const uint8_t s_sa_list[] = { 0x52u, 0x51u };
 
-static NoxWorkMode_t s_work_mode = NOX_MODE_SINGLE;
+static NoxWorkMode_t s_work_mode = NOX_MODE_PRIMARY_BACKUP;
+static uint8_t s_single_channel_index = 0u;
 
 NoxChannel_t g_noxChannels[NOX_SENSOR_COUNT_MAX];
 
@@ -89,6 +90,11 @@ void NoxChannel_SetWorkMode(NoxWorkMode_t mode)
     s_work_mode = mode;
 }
 
+void NoxChannel_SetSingleChannelIndex(uint8_t ch_index)
+{
+    s_single_channel_index = (ch_index != 0u) ? 1u : 0u;
+}
+
 void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state)
 {
     float n = 0.0f, o = 0.0f;
@@ -96,8 +102,9 @@ void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state)
     uint8_t valid_count = 0u;
 
     if (s_work_mode == NOX_MODE_SINGLE) {
-        /* Only channel 0 (backward compatible). */
-        NoxChannel_t *c = &g_noxChannels[0];
+        /* Use selected channel (0 or 1, from P34 high byte). */
+        uint8_t ch = (s_single_channel_index < NOX_SENSOR_COUNT) ? s_single_channel_index : 0u;
+        NoxChannel_t *c = &g_noxChannels[ch];
         n = c->nox_ppm;
         o = c->o2_pct;
         s = c->state;
@@ -108,7 +115,7 @@ void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state)
     }
 
     if (s_work_mode == NOX_MODE_PRIMARY_BACKUP) {
-        /* Use first valid channel (0 then 1). */
+        /* Use first valid channel (e.g. if one is heating, use the other). */
         for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
             if (NoxChannel_IsValid(ch)) {
                 NoxChannel_t *c = &g_noxChannels[ch];
