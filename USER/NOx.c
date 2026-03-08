@@ -83,8 +83,8 @@ void NOxReceive(void *argument)
             NOx_HandleOne(&item.msg, item.channel_index);
         }
 
-        /* Work mode and single-channel index from P34 (0=single, 1=primary_backup, 2=fusion;
-         * when single: P34 high byte = channel 0 or 1, e.g. 0=ch0, 0x0100=ch1). */
+        /* Work mode and single-channel index from register P34 / work_mode (0=single, 1=primary_backup, 2=fusion;
+         * when single: high byte = channel 0 or 1, e.g. 0=ch0, 0x0100=ch1). */
         {
             uint16_t mode_u = Var_Read_WorkMode();
             if (mode_u <= (uint16_t)NOX_MODE_FUSION)
@@ -139,7 +139,7 @@ void NOxDefault(void *argument)
     Blowback_Init();
 
     for (;;) {
-        /* ???¦Á????????¦²???? Var_Read_* ?????? mutex ????????????????????? list ??????? */
+        /* ??????????????????? Var_Read_* ?????? mutex ????????????????????? list ??????? */
         LOCK_VAR();
         Calibration_NOx(&NOx_parameter, &NOx_parameter1);
         Calibration_O2(&O2_parameter, &O2_parameter1);
@@ -202,7 +202,7 @@ void Register_Init(void)
     g_tVar.S1.blow_countdown = (uint16_t)(Blowback_GetInterval() > 0u ? Blowback_GetInterval() : 0u);
     g_tVar.S2.blow_status = 0u;
     g_tVar.S2.blow_countdown = (uint16_t)(Blowback_GetIntervalCh1() > 0u ? Blowback_GetIntervalCh1() : 0u);
-    g_tVar.P34 = 1u;   /* default: primary-backup */
+    g_tVar.work_mode = 1u;   /* default: primary-backup */
     UNLOCK_VAR();
 }
 

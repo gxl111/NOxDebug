@@ -422,10 +422,10 @@ static void MODS_01H(void)
             //???????????
             GPIO_PinState state = HAL_GPIO_ReadPin(relayPins[i].port, relayPins[i].pin);
             switch(i) {
-                case 0: g_tVar.D01 = state; break;
-                case 1: g_tVar.D02 = state; break;
-                case 2: g_tVar.D03 = state; break;
-                case 3: g_tVar.D04 = state; break;
+                case 0: g_tVar.coil_d01 = state; break;
+                case 1: g_tVar.coil_d02 = state; break;
+                case 2: g_tVar.coil_d03 = state; break;
+                case 3: g_tVar.coil_d04 = state; break;
             }
             status[i / 8]|=(state<< (i % 8));
         }
@@ -656,22 +656,22 @@ static void MODS_05H(void)
     if (reg+REG_D01 == REG_D01)
     {
         
-        g_tVar.D01 = value;
+        g_tVar.coil_d01 = value;
         HAL_GPIO_WritePin(relayPins[0].port, relayPins[0].pin,(GPIO_PinState)value);
     }
     else if (reg+REG_D01 == REG_D02)
     {
-        g_tVar.D02 = value;
+        g_tVar.coil_d02 = value;
         HAL_GPIO_WritePin(relayPins[1].port, relayPins[1].pin,(GPIO_PinState)value);
     }
     else if (reg+REG_D01 == REG_D03)
     {
-        g_tVar.D03 = value;
+        g_tVar.coil_d03 = value;
         HAL_GPIO_WritePin(relayPins[2].port, relayPins[2].pin,(GPIO_PinState)value);
     }
     else if (reg+REG_D01 == REG_D04)
     {
-        g_tVar.D04 = value;
+        g_tVar.coil_d04 = value;
         HAL_GPIO_WritePin(relayPins[3].port, relayPins[3].pin,(GPIO_PinState)value);
     }
     else
@@ -910,14 +910,14 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
     if (addr <= COMMON_REG_END) {
         LOCK_VAR();
         switch (addr) {
-            case SLAVE_REG_NOX_OUTPUT:      f_value = g_tVar.P01; f_flag = 1; break;
-            case SLAVE_REG_O2_OUTPUT:       f_value = g_tVar.P02; f_flag = 1; break;
-            case SLAVE_REG_OUTPUT_CH_STATUS: value = g_tVar.P07; break;
-            case SLAVE_REG_ALARM_NOX_HI:    f_value = g_tVar.P12; f_flag = 1; break;
-            case SLAVE_REG_ALARM_O2_LO:     f_value = g_tVar.P13; f_flag = 1; break;
-            case SLAVE_REG_MA_NOX:          value = g_tVar.P22; break;
-            case SLAVE_REG_MA_O2:           value = g_tVar.P23; break;
-            case SLAVE_REG_WORK_MODE:       value = g_tVar.P34; break;
+            case SLAVE_REG_NOX_OUTPUT:      f_value = g_tVar.nox_output; f_flag = 1; break;
+            case SLAVE_REG_O2_OUTPUT:       f_value = g_tVar.o2_output; f_flag = 1; break;
+            case SLAVE_REG_OUTPUT_CH_STATUS: value = g_tVar.output_ch_status; break;
+            case SLAVE_REG_ALARM_NOX_HI:    f_value = g_tVar.alarm_nox_hi; f_flag = 1; break;
+            case SLAVE_REG_ALARM_O2_LO:     f_value = g_tVar.alarm_o2_lo; f_flag = 1; break;
+            case SLAVE_REG_MA_NOX:          value = g_tVar.ma_nox; break;
+            case SLAVE_REG_MA_O2:           value = g_tVar.ma_o2; break;
+            case SLAVE_REG_WORK_MODE:       value = g_tVar.work_mode; break;
             default: UNLOCK_VAR(); return 0;
         }
         UNLOCK_VAR();
@@ -1018,13 +1018,13 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
     if (addr <= COMMON_REG_END) {
         LOCK_VAR();
         switch (addr) {
-            case SLAVE_REG_NOX_OUTPUT:      value1 = BEBufToUint16(reg_value + 2); g_tVar.P01 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
-            case SLAVE_REG_O2_OUTPUT:       value1 = BEBufToUint16(reg_value + 2); g_tVar.P02 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
-            case SLAVE_REG_ALARM_NOX_HI:    value1 = BEBufToUint16(reg_value + 2); g_tVar.P12 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
-            case SLAVE_REG_ALARM_O2_LO:     value1 = BEBufToUint16(reg_value + 2); g_tVar.P13 = RegistersToFloat_BE(value, value1); f_flag = 1; break;
-            case SLAVE_REG_MA_NOX:          g_tVar.P22 = value; break;
-            case SLAVE_REG_MA_O2:           g_tVar.P23 = value; break;
-            case SLAVE_REG_WORK_MODE:       g_tVar.P34 = value; break;
+            case SLAVE_REG_NOX_OUTPUT:      value1 = BEBufToUint16(reg_value + 2); g_tVar.nox_output = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case SLAVE_REG_O2_OUTPUT:       value1 = BEBufToUint16(reg_value + 2); g_tVar.o2_output = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case SLAVE_REG_ALARM_NOX_HI:    value1 = BEBufToUint16(reg_value + 2); g_tVar.alarm_nox_hi = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case SLAVE_REG_ALARM_O2_LO:     value1 = BEBufToUint16(reg_value + 2); g_tVar.alarm_o2_lo = RegistersToFloat_BE(value, value1); f_flag = 1; break;
+            case SLAVE_REG_MA_NOX:          g_tVar.ma_nox = value; break;
+            case SLAVE_REG_MA_O2:           g_tVar.ma_o2 = value; break;
+            case SLAVE_REG_WORK_MODE:       g_tVar.work_mode = value; break;
             default: UNLOCK_VAR(); return 0;
         }
         UNLOCK_VAR();
@@ -1093,36 +1093,36 @@ float RegistersToFloat_BE(uint16_t reg1, uint16_t reg2) {
 }
 
 // ========================== Coil D01-D04 ==========================
-void Var_Write_D01(uint16_t value) { VAR_WRITE_U16(D01, value); }
-uint16_t Var_Read_D01(void) { uint16_t r; VAR_READ_U16(D01, r); return r; }
+void Var_Write_D01(uint16_t value) { VAR_WRITE_U16(coil_d01, value); }
+uint16_t Var_Read_D01(void) { uint16_t r; VAR_READ_U16(coil_d01, r); return r; }
 
-void Var_Write_D02(uint16_t value) { VAR_WRITE_U16(D02, value); }
-uint16_t Var_Read_D02(void) { uint16_t r; VAR_READ_U16(D02, r); return r; }
+void Var_Write_D02(uint16_t value) { VAR_WRITE_U16(coil_d02, value); }
+uint16_t Var_Read_D02(void) { uint16_t r; VAR_READ_U16(coil_d02, r); return r; }
 
-void Var_Write_D03(uint16_t value) { VAR_WRITE_U16(D03, value); }
-uint16_t Var_Read_D03(void) { uint16_t r; VAR_READ_U16(D03, r); return r; }
+void Var_Write_D03(uint16_t value) { VAR_WRITE_U16(coil_d03, value); }
+uint16_t Var_Read_D03(void) { uint16_t r; VAR_READ_U16(coil_d03, r); return r; }
 
-void Var_Write_D04(uint16_t value) { VAR_WRITE_U16(D04, value); }
-uint16_t Var_Read_D04(void) { uint16_t r; VAR_READ_U16(D04, r); return r; }
+void Var_Write_D04(uint16_t value) { VAR_WRITE_U16(coil_d04, value); }
+uint16_t Var_Read_D04(void) { uint16_t r; VAR_READ_U16(coil_d04, r); return r; }
 
-// ========================== Common P01, P02, P07, P12, P13, P22, P23, P34 ==========================
-float Var_Read_NoxOutput(void) { float r; VAR_READ_FLOAT(P01, r); return r; }
-float Var_Read_O2Output(void) { float r; VAR_READ_FLOAT(P02, r); return r; }
-uint16_t Var_Read_OutputChStatus(void) { uint16_t r; VAR_READ_U16(P07, r); return r; }
-void Var_Write_NoxOutput(float value) { VAR_WRITE_FLOAT(P01, value); }
-void Var_Write_O2Output(float value) { VAR_WRITE_FLOAT(P02, value); }
-void Var_Write_OutputChStatus(uint16_t value) { VAR_WRITE_U16(P07, value); }
-void Var_Write_AlarmNoxHi(float value) { VAR_WRITE_FLOAT(P12, value); }
-float Var_Read_AlarmNoxHi(void) { float r; VAR_READ_FLOAT(P12, r); return r; }
-void Var_Write_AlarmO2Lo(float value) { VAR_WRITE_FLOAT(P13, value); }
-float Var_Read_AlarmO2Lo(void) { float r; VAR_READ_FLOAT(P13, r); return r; }
-void Var_Write_MaNox(uint16_t value) { VAR_WRITE_U16(P22, value); }
-uint16_t Var_Read_MaNox(void) { uint16_t r; VAR_READ_U16(P22, r); return r; }
-void Var_Write_MaO2(uint16_t value) { VAR_WRITE_U16(P23, value); }
-uint16_t Var_Read_MaO2(void) { uint16_t r; VAR_READ_U16(P23, r); return r; }
-void Var_Write_WorkMode(uint16_t value) { VAR_WRITE_U16(P34, value); }
-uint16_t Var_Read_WorkMode(void) { uint16_t r; VAR_READ_U16(P34, r); return (uint16_t)(r & 0x03u); }
-uint8_t Var_Read_SingleChannelIndex(void) { uint16_t r; VAR_READ_U16(P34, r); return (uint8_t)((r >> 8) & 1u); }
+/* ========================== Common: nox/o2 output, output_ch_status, alarm, ma, work_mode ========================== */
+float Var_Read_NoxOutput(void) { float r; VAR_READ_FLOAT(nox_output, r); return r; }
+float Var_Read_O2Output(void) { float r; VAR_READ_FLOAT(o2_output, r); return r; }
+uint16_t Var_Read_OutputChStatus(void) { uint16_t r; VAR_READ_U16(output_ch_status, r); return r; }
+void Var_Write_NoxOutput(float value) { VAR_WRITE_FLOAT(nox_output, value); }
+void Var_Write_O2Output(float value) { VAR_WRITE_FLOAT(o2_output, value); }
+void Var_Write_OutputChStatus(uint16_t value) { VAR_WRITE_U16(output_ch_status, value); }
+void Var_Write_AlarmNoxHi(float value) { VAR_WRITE_FLOAT(alarm_nox_hi, value); }
+float Var_Read_AlarmNoxHi(void) { float r; VAR_READ_FLOAT(alarm_nox_hi, r); return r; }
+void Var_Write_AlarmO2Lo(float value) { VAR_WRITE_FLOAT(alarm_o2_lo, value); }
+float Var_Read_AlarmO2Lo(void) { float r; VAR_READ_FLOAT(alarm_o2_lo, r); return r; }
+void Var_Write_MaNox(uint16_t value) { VAR_WRITE_U16(ma_nox, value); }
+uint16_t Var_Read_MaNox(void) { uint16_t r; VAR_READ_U16(ma_nox, r); return r; }
+void Var_Write_MaO2(uint16_t value) { VAR_WRITE_U16(ma_o2, value); }
+uint16_t Var_Read_MaO2(void) { uint16_t r; VAR_READ_U16(ma_o2, r); return r; }
+void Var_Write_WorkMode(uint16_t value) { VAR_WRITE_U16(work_mode, value); }
+uint16_t Var_Read_WorkMode(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint16_t)(r & 0x03u); }
+uint8_t Var_Read_SingleChannelIndex(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint8_t)((r >> 8) & 1u); }
 
 // ========================== Sensor accessors by channel (ch=0 or 1) ==========================
 #define S(ch) ((ch) == 0 ? &g_tVar.S1 : &g_tVar.S2)
@@ -1190,17 +1190,17 @@ void Var_Read_BlowbackCfg(uint16_t *p24, uint16_t *p25) {
 
 void Var_Read_AlarmCfg(float *p12, float *p13) {
     LOCK_VAR();
-    if (p12) *p12 = g_tVar.P12;
-    if (p13) *p13 = g_tVar.P13;
+    if (p12) *p12 = g_tVar.alarm_nox_hi;
+    if (p13) *p13 = g_tVar.alarm_o2_lo;
     UNLOCK_VAR();
 }
 
-// ========================== ???/??????? P01/P02=NOx/O?, P07=?? ==========================
+// ========================== Current output -> P01/P02/P07 (nox_output, o2_output, output_ch_status) ==========================
 void Var_Update_SensorCore(float nox, float o2, uint16_t state) {
     LOCK_VAR();
-    g_tVar.P01 = nox;
-    g_tVar.P02 = o2;
-    g_tVar.P07 = state;
+    g_tVar.nox_output = nox;
+    g_tVar.o2_output = o2;
+    g_tVar.output_ch_status = state;
     UNLOCK_VAR();
 }
 

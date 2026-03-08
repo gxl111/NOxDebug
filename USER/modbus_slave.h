@@ -130,12 +130,12 @@ typedef struct {
 } SensorRegs_t;
 
 typedef struct {
-    /* 通用: 仅 NOx/O2 输出、4-20mA、模式、报警阈值 */
-    float    P01, P02;
-    uint16_t P07;
-    float    P12, P13;
-    uint16_t P22, P23, P34;
-    uint16_t D01, D02, D03, D04;
+    /* 通用: NOx/O2 输出、输出通道状态、报警阈值、4-20mA、工作模式、线圈 */
+    float    nox_output, o2_output;
+    uint16_t output_ch_status;
+    float    alarm_nox_hi, alarm_o2_lo;
+    uint16_t ma_nox, ma_o2, work_mode;
+    uint16_t coil_d01, coil_d02, coil_d03, coil_d04;
 
     SensorRegs_t S1, S2;
 } VAR_T;
@@ -174,8 +174,10 @@ extern void Var_Write_MaNox(uint16_t value);
 extern uint16_t Var_Read_MaNox(void);
 extern void Var_Write_MaO2(uint16_t value);
 extern uint16_t Var_Read_MaO2(void);
-/** P34: low byte = work mode (0/1/2), high byte = single-channel index (0 or 1) when mode=0.
- *  Single ch0: P34=0, single ch1: P34=0x0100 (256). */
+extern void Var_Write_WorkMode(uint16_t value);
+extern uint16_t Var_Read_WorkMode(void);
+/** P34/work_mode: low byte = work mode (0/1/2), high byte = single-channel index (0 or 1) when mode=0.
+ *  Single ch0: write 0, single ch1: write 0x0100 (256). */
 extern uint8_t Var_Read_SingleChannelIndex(void);
 
 /* 传感器寄存器：按通道 ch=0 或 1 访问，两路寄存器数量与功能一致 */

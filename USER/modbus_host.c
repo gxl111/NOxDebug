@@ -362,7 +362,7 @@ static void MODH_Read_03H(void)
 
                     g_tVar_h.P01 = BEBufToUint16(p); p += 2;	/* ????? */	
                     //???????????????????
-                    g_tVar.P22=g_tVar_h.P01;
+                    g_tVar.ma_nox=g_tVar_h.P01;
                 
                     g_tModH.fAck03H = 1;
                 
@@ -371,7 +371,7 @@ static void MODH_Read_03H(void)
  
                     g_tVar_h.P02 = BEBufToUint16(p); p += 2;	/* ????? */	
                     //???????????????????
-                    g_tVar.P23=g_tVar_h.P02;
+                    g_tVar.ma_o2=g_tVar_h.P02;
                 
                     g_tModH.fAck03H = 1;
                     break;
