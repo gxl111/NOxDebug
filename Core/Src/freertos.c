@@ -66,7 +66,7 @@ const osThreadAttr_t defaultTask_attributes = {
 osThreadId_t NOx_DefaultHandle;
 const osThreadAttr_t NOx_Default_attributes = {
   .name = "NOx_Default",
-  .stack_size = 256 * 4,
+  .stack_size = 768 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ModBus_Slave */
@@ -121,9 +121,9 @@ void MX_FREERTOS_Init(void) {
 
 
   J1939_Initialization();
-	// 创建寄存器互斥信号量（优先级继承，避免优先级反转）
+	// ???????????????????????????��???????????????
 	g_hVarMutex = xSemaphoreCreateMutex();
-	configASSERT(g_hVarMutex != NULL);  // 确保创建成功
+	configASSERT(g_hVarMutex != NULL);  // ??????????
 //  HAL_CAN_Start(&hcan);
 //  
 //  HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);

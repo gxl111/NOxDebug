@@ -58,7 +58,7 @@
 uint32_t time_10ms=0;
 uint32_t time_100ms=0;
 uint32_t time_1s=0;
-//·´´µ¼ÆÊ±
+//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±
 uint32_t time_1s_blow=0;
 /* USER CODE END PV */
 
@@ -82,7 +82,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  //SCB->VTOR = FLASH_BASE | 0x00005000UL;/* ¸ü¸ÄÖÐ¶ÏÏòÁ¿±íµØÖ· */
+  //SCB->VTOR = FLASH_BASE | 0x00005000UL;/* ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö· */
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -205,7 +205,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  if(htim->Instance==htim7.Instance) {
+  if(htim->Instance==TIM7) {
         ++time_10ms;
         if (time_10ms >= 10u) {
             time_10ms = 0;

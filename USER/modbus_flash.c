@@ -8,6 +8,10 @@
 
 #define NUM_FLASH_FLOATS  24
 
+/* 静态缓冲区，避免在任务栈上分配 24*float + 24*uint32，防止 NOxDefault 栈溢出 */
+static float s_flash_src[NUM_FLASH_FLOATS];
+static uint32_t s_flash_data32[NUM_FLASH_FLOATS];
+
 static void float_to_buf(const float *src, uint32_t *dst, int n)
 {
     union { float f; uint32_t u; } c;
@@ -29,16 +33,19 @@ static void buf_to_float(const uint32_t *src, float *dst, int n)
 int InternalFlash_Write(void)
 {
     /* Order: S1 seg1, seg2, points (12 floats), then S2 same (12 floats). */
-    float src[NUM_FLASH_FLOATS] = {
-        g_tVar.S1.seg1_nox_a, g_tVar.S1.seg1_nox_b, g_tVar.S1.seg1_o2_a, g_tVar.S1.seg1_o2_b,
-        g_tVar.S1.seg2_nox_a, g_tVar.S1.seg2_nox_b, g_tVar.S1.seg2_o2_a, g_tVar.S1.seg2_o2_b,
-        g_tVar.S1.p2_nox, g_tVar.S1.p2_o2, g_tVar.S1.p3_nox, g_tVar.S1.p3_o2,
-        g_tVar.S2.seg1_nox_a, g_tVar.S2.seg1_nox_b, g_tVar.S2.seg1_o2_a, g_tVar.S2.seg1_o2_b,
-        g_tVar.S2.seg2_nox_a, g_tVar.S2.seg2_nox_b, g_tVar.S2.seg2_o2_a, g_tVar.S2.seg2_o2_b,
-        g_tVar.S2.p2_nox, g_tVar.S2.p2_o2, g_tVar.S2.p3_nox, g_tVar.S2.p3_o2
-    };
-    uint32_t DATA_32[NUM_FLASH_FLOATS];
-    float_to_buf(src, DATA_32, NUM_FLASH_FLOATS);
+    s_flash_src[0] = g_tVar.S1.seg1_nox_a; s_flash_src[1] = g_tVar.S1.seg1_nox_b;
+    s_flash_src[2] = g_tVar.S1.seg1_o2_a;  s_flash_src[3] = g_tVar.S1.seg1_o2_b;
+    s_flash_src[4] = g_tVar.S1.seg2_nox_a; s_flash_src[5] = g_tVar.S1.seg2_nox_b;
+    s_flash_src[6] = g_tVar.S1.seg2_o2_a;  s_flash_src[7] = g_tVar.S1.seg2_o2_b;
+    s_flash_src[8] = g_tVar.S1.p2_nox; s_flash_src[9] = g_tVar.S1.p2_o2;
+    s_flash_src[10] = g_tVar.S1.p3_nox; s_flash_src[11] = g_tVar.S1.p3_o2;
+    s_flash_src[12] = g_tVar.S2.seg1_nox_a; s_flash_src[13] = g_tVar.S2.seg1_nox_b;
+    s_flash_src[14] = g_tVar.S2.seg1_o2_a;  s_flash_src[15] = g_tVar.S2.seg1_o2_b;
+    s_flash_src[16] = g_tVar.S2.seg2_nox_a; s_flash_src[17] = g_tVar.S2.seg2_nox_b;
+    s_flash_src[18] = g_tVar.S2.seg2_o2_a;  s_flash_src[19] = g_tVar.S2.seg2_o2_b;
+    s_flash_src[20] = g_tVar.S2.p2_nox; s_flash_src[21] = g_tVar.S2.p2_o2;
+    s_flash_src[22] = g_tVar.S2.p3_nox; s_flash_src[23] = g_tVar.S2.p3_o2;
+    float_to_buf(s_flash_src, s_flash_data32, NUM_FLASH_FLOATS);
 
     FLASH_EraseInitTypeDef EraseInitStruct;
     uint32_t SECTORError;
@@ -57,7 +64,7 @@ int InternalFlash_Write(void)
 
     uint32_t Address = FLASH_USER_START_ADDR;
     for (int i = 0; i < NUM_FLASH_FLOATS && Address < FLASH_USER_END_ADDR; i++) {
-        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, Address, DATA_32[i]) != HAL_OK) {
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, Address, s_flash_data32[i]) != HAL_OK) {
             HAL_FLASH_Lock();
             return -1;
         }
@@ -69,7 +76,7 @@ int InternalFlash_Write(void)
     /* Verify */
     Address = FLASH_USER_START_ADDR;
     for (int j = 0; j < NUM_FLASH_FLOATS && Address < FLASH_USER_END_ADDR; j++, Address += 4) {
-        if (*(__IO uint32_t *)Address != DATA_32[j])
+        if (*(__IO uint32_t *)Address != s_flash_data32[j])
             return 0;
     }
     return 1;
