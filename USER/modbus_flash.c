@@ -82,12 +82,6 @@ int InternalFlash_Write(void)
     return 1;
 }
 
-int Flash_ParamsLooksEmpty(void)
-{
-    uint32_t w = *(__IO uint32_t *)FLASH_USER_START_ADDR;
-    return (w == 0xFFFFFFFFu) ? 1 : 0;
-}
-
 int FactoryFlash_ProgramDefaults(void)
 {
     /* Caller must have filled g_tVar.S1/S2 seg1/seg2/p2/p3 (e.g. Register_Init after NoxChannel_Init). */

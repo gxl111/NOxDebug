@@ -146,7 +146,7 @@ Only one sensor may be in blowback at a time (enforced in firmware).
 ### 6.2 First Power-Up
 
 - After flash, the device loads parameters from **internal Flash** (if previously saved). If Flash is empty, defaults from **app_config.h** and **Register_Init** are used.
-- **Factory / first boot:** If **ENABLE_FACTORY_FLASH_ON_EMPTY** is 1 (in **app_config.h**), on first power-up when the calibration Flash area is still erased (0xFF), the firmware **writes default calibration (24 floats) to Flash once** after **Register_Init**, so later boots load valid floats instead of NaN/FF. To re-run factory program, erase the user Flash page or call **FactoryFlash_ProgramDefaults()** after **Register_Init** from debug.
+- **Factory program (manual):** Set **FACTORY_FLASH_PROGRAM_ON_BOOT** to **1** in **app_config.h**, build, flash, power once — firmware **writes current default calibration (24 floats) to Flash** after **Register_Init** and does **not** Load that boot. Then set the macro back to **0**, rebuild, and flash again for normal operation (Load on boot). If left at 1, every boot will erase/write Flash and overwrite user calibration.
 - Modbus slave uses **USART1** (RS485); ensure the HMI or PC tool uses the same baud rate (e.g. 115200) and slave address (default 1).
 - Optional: put a **config.txt** on the SD card to override baud rate (e.g. `baudrate=115200`). The exact key names depend on **handleConfig()** in the SD card module.
 
