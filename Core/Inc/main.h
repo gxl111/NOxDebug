@@ -36,7 +36,6 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-extern uint32_t time_100ms;
 extern uint32_t time_1s;
 extern uint32_t time_1s_blow;
 /* USER CODE END ET */

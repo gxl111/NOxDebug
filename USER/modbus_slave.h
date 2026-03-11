@@ -1,7 +1,7 @@
 /*
  * modbus_slave.h - Modbus RTU slave (holding registers + coils).
- * Í¨ÓÃ¼Ä´æÆ÷: ½ö NOx/O2 Êä³ö¡¢4-20mA¡¢Ä£Ê½¡¢±¨¾¯ãÐÖµ¡£
- * ´«¸ÐÆ÷¼Ä´æÆ÷: Á½Â·´«¸ÐÆ÷ÍêÈ«¶Ô³Æ£¬ÊýÁ¿Óë¹¦ÄÜÒ»ÖÂ¡£
+ * Í¨ï¿½Ã¼Ä´ï¿½ï¿½ï¿½: ï¿½ï¿½ NOx/O2 ï¿½ï¿½ï¿½ï¿½ï¿½4-20mAï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½
+ * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä´ï¿½ï¿½ï¿½: ï¿½ï¿½Â·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È«ï¿½Ô³Æ£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ë¹¦ï¿½ï¿½Ò»ï¿½Â¡ï¿½
  * Flash save/load: see modbus_flash.h.
  */
 #ifndef __MODBUS_SLAVE_H
@@ -32,24 +32,24 @@ extern SemaphoreHandle_t g_hVarMutex;
 
 #define SLAVE_REG_START  40001
 
-/* ==================== Í¨ÓÃ¼Ä´æÆ÷£¨½öÒÔÏÂ¼¸Àà£© ==================== */
-#define SLAVE_REG_NOX_OUTPUT      40001   /* NOx Êä³ö (float, 2 regs) */
-#define SLAVE_REG_O2_OUTPUT       40003   /* O2 Êä³ö (float, 2 regs) */
-#define SLAVE_REG_OUTPUT_CH_STATUS 40005  /* µ±Ç°Êä³öÍ¨µÀ×´Ì¬ (R, u16) */
-#define SLAVE_REG_ALARM_NOX_HI    40006   /* ±¨¾¯ NOx ¸ßÏÞ (float, 2 regs) */
-#define SLAVE_REG_ALARM_O2_LO     40008   /* ±¨¾¯ O2 µÍÏÞ (float, 2 regs) */
-#define SLAVE_REG_MA_NOX          40010   /* 4-20mA NOx Âë (u16) */
-#define SLAVE_REG_MA_O2           40011   /* 4-20mA O2 Âë (u16) */
-#define SLAVE_REG_WORK_MODE       40012   /* ¹¤×÷Ä£Ê½ (u16): µÍ×Ö½Ú 0=µ¥Â· 1=Ö÷±¸ 2=ÈÚºÏ£»µ¥Â·Ê±¸ß×Ö½Ú=Í¨µÀ 0/1£¬Èç 0x0100 ±íÊ¾Í¨µÀ1 */
-#define COMMON_REG_END            40012   /* Í¨ÓÃ½áÊøµØÖ· */
+/* ==================== Í¨ï¿½Ã¼Ä´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½à£© ==================== */
+#define SLAVE_REG_NOX_OUTPUT      40001   /* NOx ï¿½ï¿½ï¿½ (float, 2 regs) */
+#define SLAVE_REG_O2_OUTPUT       40003   /* O2 ï¿½ï¿½ï¿½ (float, 2 regs) */
+#define SLAVE_REG_OUTPUT_CH_STATUS 40005  /* ï¿½ï¿½Ç°ï¿½ï¿½ï¿½Í¨ï¿½ï¿½×´Ì¬ (R, u16) */
+#define SLAVE_REG_ALARM_NOX_HI    40006   /* ï¿½ï¿½ï¿½ï¿½ NOx ï¿½ï¿½ï¿½ï¿½ (float, 2 regs) */
+#define SLAVE_REG_ALARM_O2_LO     40008   /* ï¿½ï¿½ï¿½ï¿½ O2 ï¿½ï¿½ï¿½ï¿½ (float, 2 regs) */
+#define SLAVE_REG_MA_NOX          40010   /* 4-20mA NOx ï¿½ï¿½ (u16) */
+#define SLAVE_REG_MA_O2           40011   /* 4-20mA O2 ï¿½ï¿½ (u16) */
+#define SLAVE_REG_WORK_MODE       40012   /* ï¿½ï¿½ï¿½ï¿½Ä£Ê½ (u16): ï¿½ï¿½ï¿½Ö½ï¿½ 0=ï¿½ï¿½Â· 1=ï¿½ï¿½ï¿½ï¿½ 2=ï¿½ÚºÏ£ï¿½ï¿½ï¿½Â·Ê±ï¿½ï¿½ï¿½Ö½ï¿½=Í¨ï¿½ï¿½ 0/1ï¿½ï¿½ï¿½ï¿½ 0x0100 ï¿½ï¿½Ê¾Í¨ï¿½ï¿½1 */
+#define COMMON_REG_END            40012   /* Í¨ï¿½Ã½ï¿½ï¿½ï¿½ï¿½ï¿½Ö· */
 
-/* ==================== ´«¸ÐÆ÷¿é£¨Á½Â·ÍêÈ«Ò»ÖÂ£¬Ã¿¿é 38 ¸ö¼Ä´æÆ÷µØÖ·£© ==================== */
-/* ¿éÄÚË³Ðò: ÊµÊ±NOx, ÊµÊ±O2, ×´Ì¬ | ±ê¶¨¶Î1 NOx/O2 | ±ê¶¨¶Î2 NOx/O2 | ±ê¶¨µã2/3 NOx/O2 | ±ê¶¨¿ØÖÆ NOx/O2 | ·´´µ ... */
+/* ==================== ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½é£¨ï¿½ï¿½Â·ï¿½ï¿½È«Ò»ï¿½Â£ï¿½Ã¿ï¿½ï¿½ 38 ï¿½ï¿½ï¿½Ä´ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ ==================== */
+/* ï¿½ï¿½ï¿½ï¿½Ë³ï¿½ï¿½: ÊµÊ±NOx, ÊµÊ±O2, ×´Ì¬ | ï¿½ê¶¨ï¿½ï¿½1 NOx/O2 | ï¿½ê¶¨ï¿½ï¿½2 NOx/O2 | ï¿½ê¶¨ï¿½ï¿½2/3 NOx/O2 | ï¿½ê¶¨ï¿½ï¿½ï¿½ï¿½ NOx/O2 | ï¿½ï¿½ï¿½ï¿½ ... */
 #define SENSOR_BASE_1    40013
 #define SENSOR_BASE_2    40051
 #define SENSOR_REG_COUNT 38
 
-/* ´«¸ÐÆ÷1 µØÖ· (40013-40050) */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1 ï¿½ï¿½Ö· (40013-40050) */
 #define SLAVE_REG_S1_LIVE_NOX    40013
 #define SLAVE_REG_S1_LIVE_O2     40015
 #define SLAVE_REG_S1_STATUS      40017
@@ -75,7 +75,7 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_S1_BLOW_CD     40049
 #define SLAVE_REG_S1_BLOW_CMD    40050
 
-/* ´«¸ÐÆ÷2 µØÖ· (40051-40088)£¬Óë´«¸ÐÆ÷1 Ò»Ò»¶ÔÓ¦ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½2 ï¿½ï¿½Ö· (40051-40088)ï¿½ï¿½ï¿½ë´«ï¿½ï¿½ï¿½ï¿½1 Ò»Ò»ï¿½ï¿½Ó¦ */
 #define SLAVE_REG_S2_LIVE_NOX    40051
 #define SLAVE_REG_S2_LIVE_O2     40053
 #define SLAVE_REG_S2_STATUS      40055
@@ -118,7 +118,7 @@ typedef struct {
     uint8_t TxCount;
 } MODS_T;
 
-/* µ¥Â·´«¸ÐÆ÷¼Ä´æÆ÷£¨Á½Â·½á¹¹Ò»ÖÂ£© */
+/* ï¿½ï¿½Â·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â·ï¿½á¹¹Ò»ï¿½Â£ï¿½ */
 typedef struct {
     float    live_nox, live_o2;
     uint16_t status;
@@ -130,7 +130,7 @@ typedef struct {
 } SensorRegs_t;
 
 typedef struct {
-    /* Í¨ÓÃ: NOx/O2 Êä³ö¡¢Êä³öÍ¨µÀ×´Ì¬¡¢±¨¾¯ãÐÖµ¡¢4-20mA¡¢¹¤×÷Ä£Ê½¡¢ÏßÈ¦ */
+    /* Í¨ï¿½ï¿½: NOx/O2 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½4-20mAï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½È¦ */
     float    nox_output, o2_output;
     uint16_t output_ch_status;
     float    alarm_nox_hi, alarm_o2_lo;
@@ -158,7 +158,7 @@ extern uint16_t Var_Read_D03(void);
 extern void Var_Write_D04(uint16_t value);
 extern uint16_t Var_Read_D04(void);
 
-/* Í¨ÓÃ¼Ä´æÆ÷ */
+/* Í¨ï¿½Ã¼Ä´ï¿½ï¿½ï¿½ */
 extern float Var_Read_NoxOutput(void);
 extern float Var_Read_O2Output(void);
 extern uint16_t Var_Read_OutputChStatus(void);
@@ -180,7 +180,7 @@ extern uint16_t Var_Read_WorkMode(void);
  *  Single ch0: write 0, single ch1: write 0x0100 (256). */
 extern uint8_t Var_Read_SingleChannelIndex(void);
 
-/* ´«¸ÐÆ÷¼Ä´æÆ÷£º°´Í¨µÀ ch=0 »ò 1 ·ÃÎÊ£¬Á½Â·¼Ä´æÆ÷ÊýÁ¿Óë¹¦ÄÜÒ»ÖÂ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ ch=0 ï¿½ï¿½ 1 ï¿½ï¿½ï¿½Ê£ï¿½ï¿½ï¿½Â·ï¿½Ä´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ë¹¦ï¿½ï¿½Ò»ï¿½ï¿½ */
 extern float  Var_Read_SensorLiveNox(uint8_t ch);
 extern float  Var_Read_SensorLiveO2(uint8_t ch);
 extern uint16_t Var_Read_SensorStatus(uint8_t ch);
@@ -233,7 +233,7 @@ extern void Var_Write_SensorBlowInterval(uint8_t ch, uint16_t v);
 extern void Var_Write_SensorBlowDuration(uint8_t ch, uint16_t v);
 extern void Var_Write_SensorBlowCmd(uint8_t ch, uint16_t v);
 
-/* ¼æÈÝ¾É´úÂëµÄÅúÁ¿¶Á */
+/* ï¿½ï¿½ï¿½Ý¾É´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 extern void Var_Read_BlowbackCfg(uint16_t *p24, uint16_t *p25);
 extern void Var_Read_AlarmCfg(float *p12, float *p13);
 extern void Var_Update_SensorCore(float nox, float o2, uint16_t state);

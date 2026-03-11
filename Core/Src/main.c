@@ -29,6 +29,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "modbus.h"
 #include "modbus_slave.h"
 #include "modbus_host.h"
 #include "J1939.h"
@@ -54,12 +55,10 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
-uint32_t time_10ms=0;
-uint32_t time_100ms=0;
-uint32_t time_1s=0;
-//������ʱ
-uint32_t time_1s_blow=0;
+/* TIM7 = 10 ms tick (tim.c); 100 ticks => time_1s / time_1s_blow increment. */
+static uint32_t s_sys_tick_10ms;
+uint32_t time_1s;
+uint32_t time_1s_blow;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -205,34 +204,26 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-  if(htim->Instance==TIM7) {
-        ++time_10ms;
-        if (time_10ms >= 10u) {
-            time_10ms = 0;
-            ++time_100ms;
-        }
-        if (time_100ms >= 10u) {
-            time_100ms = 0;
-            ++time_1s;
-            ++time_1s_blow;
-
-        }
-        
-   }
-   if(htim->Instance==TIM2) {
-        if (s_TIM_CallBack1 != NULL) {
-            s_TIM_CallBack1();
-            HAL_TIM_Base_Stop_IT(&RX_TIMER);
-
-        }
-   }
-   if(htim->Instance==TIM3) {
-        if (s_TIM_CallBack2 != NULL) {
-            s_TIM_CallBack2();
-            HAL_TIM_Base_Stop_IT(&RX_TIMER_H);
-
-        }
-   }
+  /* TIM7: 10 ms base; 100 ticks = 1 s (see MX_TIM7_Init Period/Prescaler). */
+  if (htim->Instance == TIM7) {
+    if (++s_sys_tick_10ms >= 100u) {
+      s_sys_tick_10ms = 0u;
+      time_1s++;
+      time_1s_blow++;
+    }
+  }
+  /* Modbus RX frame gap timeout: slave uses RX_TIMER, host uses RX_TIMER_H (modbus.h). */
+  if (MODBUS_IS_SLAVE_RX_TIMEOUT_HTIM(htim)) {
+    if (s_TIM_CallBack1 != NULL) {
+      s_TIM_CallBack1();
+      HAL_TIM_Base_Stop_IT(&RX_TIMER);
+    }
+  } else if (MODBUS_IS_HOST_RX_TIMEOUT_HTIM(htim)) {
+    if (s_TIM_CallBack2 != NULL) {
+      s_TIM_CallBack2();
+      HAL_TIM_Base_Stop_IT(&RX_TIMER_H);
+    }
+  }
   /* USER CODE END Callback 1 */
 }
 

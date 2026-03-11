@@ -8,6 +8,8 @@
 
 /* Slave: USART1, TIM2 for RX timeout */
 #define RX_TIMER htim2
+/** Compare HAL callback htim to slave RX timeout timer (avoid hardcoding TIM2 in main). */
+#define MODBUS_IS_SLAVE_RX_TIMEOUT_HTIM(_htim)  ((_htim) == &(RX_TIMER))
 #define MDSUARTx  huart1
 #define MODBUSUART   USART1
 #define RS485_EN_PORT RS485_RE_GPIO_Port
@@ -15,6 +17,8 @@
 
 /* Host: UART5, TIM3 for RX timeout */
 #define RX_TIMER_H htim3
+/** Compare HAL callback htim to host RX timeout timer (avoid hardcoding TIM3 in main). */
+#define MODBUS_IS_HOST_RX_TIMEOUT_HTIM(_htim)   ((_htim) == &(RX_TIMER_H))
 #define MDSUARTxH  huart5
 #define MODBUSUARTH   UART5
 #define RS485_EN_PORT_H RS485_RE_GPIO_Port
