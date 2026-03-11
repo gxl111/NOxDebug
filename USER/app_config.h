@@ -37,10 +37,10 @@
 /** Stagger between ch0 and ch1 periodic blowback start (s). Ch1 fires at (n*interval + stagger). */
 #define BLOW_STAGGER_SEC        300u
 
-/* 4–20 mA output: full-scale NOx (ppm) and O2 (%) */
+/* 4�C20 mA output: full-scale NOx (ppm) and O2 (%) */
 #define NOX_FS_PPM   2500.0f
 #define O2_FS_PCT    25.0f
-/* 4 mA = 4000, 20 mA = 20000 in internal units (e.g. 0.1 µA or DAC step) */
+/* 4 mA = 4000, 20 mA = 20000 in internal units (e.g. 0.1 ?A or DAC step) */
 #define MA4_BASE     4000u
 #define MA20_RANGE   16000u
 
@@ -54,6 +54,9 @@
 #define NOX_SENSOR_COUNT       2u
 /* Source addresses per channel: [0]=0x52, [1]=0x51 */
 #define NOX_SENSOR_SA_LIST     { 0x52u, 0x51u }
+
+/* 1 = first boot / empty Flash: write default calibration (24 floats) to Flash once; 0 = always Load only */
+#define ENABLE_FACTORY_FLASH_ON_EMPTY   1
 
 /* Work mode: which channel(s) drive the single 4-20mA output */
 typedef enum {

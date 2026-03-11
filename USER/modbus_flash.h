@@ -16,4 +16,14 @@ int InternalFlash_Write(void);
 /** Load g_tVar params from Flash into RAM. */
 void LoadRegistersFromFlash(void);
 
+/** 1 if Flash user area looks erased (first word 0xFFFFFFFF) — should run factory program. */
+int Flash_ParamsLooksEmpty(void);
+
+/**
+ * Factory program: persist current g_tVar.S1/S2 calibration floats to Flash.
+ * Call after Register_Init() so RAM holds defaults; does not erase other sectors.
+ * Returns same as InternalFlash_Write (1 ok, 0 verify fail, -1 error).
+ */
+int FactoryFlash_ProgramDefaults(void);
+
 #endif

@@ -7,6 +7,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 #include "modbus_slave.h"
+#include "modbus_flash.h"
 #include "modbus_host.h"
 #include "blowback.h"
 #include "calibration.h"
@@ -166,7 +167,15 @@ void ModBusSlave(void *argument)
     HAL_UART_Init(&MDSUARTx);
     MODRx_SemaphoreHandle = xSemaphoreCreateBinary();
     Register_Init();
-    LoadRegistersFromFlash();
+#if ENABLE_FACTORY_FLASH_ON_EMPTY
+    /* 出厂 / 首次上电：Flash 未写过时先把默认标定写入 Flash，避免 Load 读出全 FF */
+    if (Flash_ParamsLooksEmpty()) {
+        (void)FactoryFlash_ProgramDefaults();
+    } else
+#endif
+    {
+        LoadRegistersFromFlash();
+    }
     AfterFlash_Init();
     Calibration_Init();
     Start_Receive();
