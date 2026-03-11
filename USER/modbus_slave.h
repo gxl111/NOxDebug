@@ -1,7 +1,7 @@
 /*
  * modbus_slave.h - Modbus RTU slave (holding registers + coils).
- * ͨ�üĴ���: �� NOx/O2 �����4-20mA��ģʽ��������ֵ��
- * �������Ĵ���: ��·��������ȫ�Գƣ������빦��һ�¡�
+ * 通锟�?寄达拷锟斤拷: 锟斤�? NOx/O2 锟斤拷锟斤拷锟�4-20mA锟斤拷模式锟斤拷锟斤拷锟斤拷锟斤拷值锟斤拷
+ * 锟斤拷锟斤拷锟斤拷锟侥达拷锟斤拷: 锟斤拷路锟斤拷锟斤拷锟斤拷锟斤拷全锟皆称ｏ拷锟斤拷锟斤拷锟�??功锟斤拷一锟铰★拷
  * Flash save/load: see modbus_flash.h.
  */
 #ifndef __MODBUS_SLAVE_H
@@ -32,24 +32,24 @@ extern SemaphoreHandle_t g_hVarMutex;
 
 #define SLAVE_REG_START  40001
 
-/* ==================== ͨ�üĴ����������¼��ࣩ ==================== */
-#define SLAVE_REG_NOX_OUTPUT      40001   /* NOx ��� (float, 2 regs) */
-#define SLAVE_REG_O2_OUTPUT       40003   /* O2 ��� (float, 2 regs) */
-#define SLAVE_REG_OUTPUT_CH_STATUS 40005  /* ��ǰ���ͨ��״̬ (R, u16) */
-#define SLAVE_REG_ALARM_NOX_HI    40006   /* ���� NOx ���� (float, 2 regs) */
-#define SLAVE_REG_ALARM_O2_LO     40008   /* ���� O2 ���� (float, 2 regs) */
-#define SLAVE_REG_MA_NOX          40010   /* 4-20mA NOx �� (u16) */
-#define SLAVE_REG_MA_O2           40011   /* 4-20mA O2 �� (u16) */
-#define SLAVE_REG_WORK_MODE       40012   /* ����ģʽ (u16): ���ֽ� 0=��· 1=���� 2=�ںϣ���·ʱ���ֽ�=ͨ�� 0/1���� 0x0100 ��ʾͨ��1 */
-#define COMMON_REG_END            40012   /* ͨ�ý�����ַ */
+/* ==================== 通锟�?寄达拷锟斤拷锟斤拷锟斤拷锟斤拷锟铰硷拷锟洁） ==================== */
+#define SLAVE_REG_NOX_OUTPUT      40001   /* NOx 锟斤拷锟�? (float, 2 regs) */
+#define SLAVE_REG_O2_OUTPUT       40003   /* O2 锟斤拷锟�? (float, 2 regs) */
+#define SLAVE_REG_OUTPUT_CH_STATUS 40005  /* 锟斤拷前锟斤拷锟酵�锟斤拷状�? (R, u16) */
+#define SLAVE_REG_ALARM_NOX_HI    40006   /* 锟斤拷锟斤拷 NOx 锟斤拷锟斤拷 (float, 2 regs) */
+#define SLAVE_REG_ALARM_O2_LO     40008   /* 锟斤拷锟斤拷 O2 锟斤拷锟斤拷 (float, 2 regs) */
+#define SLAVE_REG_MA_NOX          40010   /* 4-20mA NOx 锟斤�? (u16) */
+#define SLAVE_REG_MA_O2           40011   /* 4-20mA O2 锟斤�? (u16) */
+#define SLAVE_REG_WORK_MODE       40012   /* 锟斤拷锟斤拷模式 (u16): 锟斤拷锟街斤�? 0=锟斤拷路 1=锟斤拷锟斤拷 2=锟节合ｏ拷锟斤拷�?时锟斤拷锟�?�斤�?=通锟斤拷 0/1锟斤拷锟斤拷 0x0100 锟斤拷示通锟斤拷1 */
+#define COMMON_REG_END            40012   /* 通锟�?斤拷锟斤拷锟斤拷址 */
 
-/* ==================== �������飨��·��ȫһ�£�ÿ�� 38 ���Ĵ�����ַ�� ==================== */
-/* ����˳��: ʵʱNOx, ʵʱO2, ״̬ | �궨��1 NOx/O2 | �궨��2 NOx/O2 | �궨��2/3 NOx/O2 | �궨���� NOx/O2 | ���� ... */
+/* ==================== 锟斤拷锟斤拷锟斤拷锟介（锟斤拷路锟斤拷全一锟铰ｏ拷每锟斤拷 38 锟斤拷锟侥达拷锟斤拷锟斤拷址锟斤�? ==================== */
+/* 锟斤拷锟斤拷顺锟斤拷: 实时NOx, 实时O2, 状�? | 锟疥定锟斤拷1 NOx/O2 | 锟疥定锟斤拷2 NOx/O2 | 锟疥定锟斤拷2/3 NOx/O2 | 锟疥定锟斤拷锟斤�? NOx/O2 | 锟斤拷锟斤拷 ... */
 #define SENSOR_BASE_1    40013
 #define SENSOR_BASE_2    40051
 #define SENSOR_REG_COUNT 38
 
-/* ������1 ��ַ (40013-40050) */
+/* 锟斤拷锟斤拷锟斤�?1 锟斤拷址 (40013-40050) */
 #define SLAVE_REG_S1_LIVE_NOX    40013
 #define SLAVE_REG_S1_LIVE_O2     40015
 #define SLAVE_REG_S1_STATUS      40017
@@ -72,10 +72,10 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_S1_BLOW_INT    40046
 #define SLAVE_REG_S1_BLOW_DUR    40047
 #define SLAVE_REG_S1_BLOW_STATUS 40048
-#define SLAVE_REG_S1_BLOW_CD     40049
+#define SLAVE_REG_S1_BLOW_CD     40049   /* R: idle=sec to next blow; blowing=sec left */
 #define SLAVE_REG_S1_BLOW_CMD    40050
 
-/* ������2 ��ַ (40051-40088)���봫����1 һһ��Ӧ */
+/* 锟斤拷锟斤拷锟斤�?2 锟斤拷址 (40051-40088)锟斤拷锟�?传锟斤拷锟斤�?1 一一锟斤拷应 */
 #define SLAVE_REG_S2_LIVE_NOX    40051
 #define SLAVE_REG_S2_LIVE_O2     40053
 #define SLAVE_REG_S2_STATUS      40055
@@ -98,7 +98,7 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_S2_BLOW_INT    40084
 #define SLAVE_REG_S2_BLOW_DUR    40085
 #define SLAVE_REG_S2_BLOW_STATUS 40086
-#define SLAVE_REG_S2_BLOW_CD     40087
+#define SLAVE_REG_S2_BLOW_CD     40087   /* R: idle=sec to next blow; blowing=sec left */
 #define SLAVE_REG_S2_BLOW_CMD    40088
 
 #define RSP_OK              0
@@ -119,7 +119,7 @@ typedef struct {
     uint8_t TxCount;
 } MODS_T;
 
-/* ��·�������Ĵ�������·�ṹһ�£� */
+/* 锟斤拷路锟斤拷锟斤拷锟斤拷锟侥达拷锟斤拷锟斤拷锟斤拷�?锟结构一锟铰ｏ拷 */
 typedef struct {
     float    live_nox, live_o2;
     uint16_t status;
@@ -131,7 +131,7 @@ typedef struct {
 } SensorRegs_t;
 
 typedef struct {
-    /* ͨ��: NOx/O2 ��������ͨ��״̬��������ֵ��4-20mA������ģʽ����Ȧ */
+    /* 通锟斤拷: NOx/O2 锟斤拷锟斤拷锟斤拷锟斤拷通锟斤拷状态锟斤拷锟斤拷锟斤拷锟斤拷值锟斤拷4-20mA锟斤拷锟斤拷锟斤拷模式锟斤拷锟斤拷圈 */
     float    nox_output, o2_output;
     uint16_t output_ch_status;
     float    alarm_nox_hi, alarm_o2_lo;
@@ -159,7 +159,7 @@ extern uint16_t Var_Read_D03(void);
 extern void Var_Write_D04(uint16_t value);
 extern uint16_t Var_Read_D04(void);
 
-/* ͨ�üĴ��� */
+/* 通锟�?寄达拷锟斤拷 */
 extern float Var_Read_NoxOutput(void);
 extern float Var_Read_O2Output(void);
 extern uint16_t Var_Read_OutputChStatus(void);
@@ -181,7 +181,7 @@ extern uint16_t Var_Read_WorkMode(void);
  *  Single ch0: write 0, single ch1: write 0x0100 (256). */
 extern uint8_t Var_Read_SingleChannelIndex(void);
 
-/* �������Ĵ�������ͨ�� ch=0 �� 1 ���ʣ���·�Ĵ��������빦��һ�� */
+/* 锟斤拷锟斤拷锟斤拷锟侥达拷锟斤拷锟斤拷锟斤拷通锟斤拷 ch=0 锟斤�? 1 锟斤拷锟绞ｏ拷锟斤拷�?锟侥达拷锟斤拷锟斤拷锟斤拷锟�?功锟斤拷一锟斤�? */
 extern float  Var_Read_SensorLiveNox(uint8_t ch);
 extern float  Var_Read_SensorLiveO2(uint8_t ch);
 extern uint16_t Var_Read_SensorStatus(uint8_t ch);
@@ -234,7 +234,7 @@ extern void Var_Write_SensorBlowInterval(uint8_t ch, uint16_t v);
 extern void Var_Write_SensorBlowDuration(uint8_t ch, uint16_t v);
 extern void Var_Write_SensorBlowCmd(uint8_t ch, uint16_t v);
 
-/* ���ݾɴ���������� */
+/* 锟斤拷锟捷旧达拷锟斤拷锟斤拷锟斤拷锟斤拷锟� */
 extern void Var_Read_BlowbackCfg(uint16_t *p24, uint16_t *p25);
 extern void Var_Read_AlarmCfg(float *p12, float *p13);
 extern void Var_Update_SensorCore(float nox, float o2, uint16_t state);

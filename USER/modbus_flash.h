@@ -1,6 +1,7 @@
 /*
  * modbus_flash.h - Internal Flash save/load for Modbus register parameters (VAR_T).
- * Saves P03-P21 (ch0) and P41-P52 (ch1) = 24 floats to FLASH_USER area.
+ * Saves 24 floats (S1/S2 calibration) + blow interval/duration per channel to FLASH_USER area.
+ * Stagger between channels is fixed in blowback.c (BLOW_STAGGER_SEC), not in Flash.
  */
 #ifndef __MODBUS_FLASH_H
 #define __MODBUS_FLASH_H

@@ -170,7 +170,7 @@ Only one sensor may be in blowback at a time (enforced in firmware).
 
 - **O₂:** use each sensor’s **O₂ point select** (40045 / 40083), **point 2/3 O₂** in the same block, and **O₂ cal trigger** (40044 / 40082) with **0x0001** (calibrate) or **0x0002** (restore).
 
-- Calibration results are written to **internal Flash** (S1 + S2, 24 floats) so they persist after power cycle.
+- Calibration results and **blowback interval/duration (40046/40047 and 40084/40085)** are written to **internal Flash** together whenever **InternalFlash_Write** runs (e.g. after a successful calibration step or **FACTORY_FLASH_PROGRAM_ON_BOOT**). Default factory values are **3600 s** interval and **60 s** duration per channel. **5-minute stagger** between ch0 and ch1 remains implemented in **blowback.c** (**BLOW_STAGGER_SEC**), not stored in Flash.
 
 ### 6.5 Blowback Control (Two Valves)
 
@@ -180,7 +180,7 @@ Only one sensor may be in blowback at a time (enforced in firmware).
 
 - **Sensor 2 (Relay2/3):** registers **40084–40088** — same layout (interval, duration, status, countdown, command).
 
-Example: set 40046 = 3600, 40047 = 60 for sensor 1 “blow 60 s every 3600 s”. Set 40084/40085 similarly for sensor 2. Write 40050 = 1 or 40088 = 1 for a single manual blow. Read status and countdown (40048/40049 and 40086/40087) for HMI display.
+Example: set 40046 = 3600, 40047 = 60 for sensor 1 “blow 60 s every 3600 s”. Set 40084/40085 similarly for sensor 2. To persist blow settings after a power cycle, trigger a Flash save (e.g. run factory program once with **FACTORY_FLASH_PROGRAM_ON_BOOT = 1** after setting registers, or perform a calibration write that calls **InternalFlash_Write**). Write 40050 = 1 or 40088 = 1 for a single manual blow. Read status and countdown (40048/40049 and 40086/40087) for HMI display. **40049/40087 countdown:** when **status = 0 (idle)** = seconds until the next periodic blow; when **status = 1 (blowing)** = seconds remaining in the current blow.
 
 - **Stagger:** Periodic blowback for **sensor 2 (ch1)** is offset by **5 minutes (300 s)** from sensor 1’s phase so the two paths do not request blowback at the same tick. Ch0 still fires at `tick % interval == 0`; ch1 fires when `tick % interval == (300 % interval)` (see **BLOW_STAGGER_SEC** in **app_config.h**). Only one valve can blow at a time; if one is already blowing, the other start is skipped until it finishes.
 

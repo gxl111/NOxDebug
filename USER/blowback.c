@@ -183,40 +183,48 @@ static void Blowback_UpdateOne(uint8_t ch)
             BLOW_CONTROL(ch, 1);
     }
 
+    /*
+     * blow_countdown (40049 / 40087), always in seconds:
+     * - blow_status == 0 (idle): interval countdown = seconds until next periodic blow start.
+     * - blow_status == 1 (blowing): duration countdown = seconds remaining until blow ends.
+     */
     {
-        uint32_t p_val;
+        uint32_t cd = 0u;
         if (sc->blow_flag) {
+            /* Blowing: show remaining blow duration */
             uint32_t elapsed = time_1s - sc->blow_start_time_1s;
-            p_val = (elapsed >= sc->blowtime) ? 0u : (sc->blowtime - elapsed);
-            if (p_val == 0u) p_val = 1u;
-        } else {
-            if (sc->blowspan == 0u)
-                p_val = 0u;
-            else if (ch == 0u) {
-                uint32_t remainder = tick % sc->blowspan;
-                p_val = (remainder == 0u) ? sc->blowspan : (sc->blowspan - remainder);
+            if (elapsed < sc->blowtime)
+                cd = sc->blowtime - elapsed;
+            else
+                cd = 0u; /* timer callback will clear valve shortly */
+        } else if (sc->blowspan != 0u) {
+            /* Idle: show seconds until next scheduled blow (interval phase) */
+            if (ch == 0u) {
+                /* Ch0 fires when tick % span == 0 */
+                uint32_t r = tick % sc->blowspan;
+                cd = (r == 0u) ? sc->blowspan : (sc->blowspan - r);
             } else {
-                /* Ch1: countdown to next blow at phase BLOW_STAGGER_SEC % span */
+                /* Ch1 fires when tick % span == phase (stagger) */
                 uint32_t span = sc->blowspan;
                 uint32_t phase = BLOW_STAGGER_SEC % span;
                 if (phase == 0u)
                     phase = span / 2u ? span / 2u : 1u;
                 uint32_t r = tick % span;
-                if (r <= phase)
-                    p_val = phase - r;
+                if (r < phase)
+                    cd = phase - r;
+                else if (r > phase)
+                    cd = span - r + phase;
                 else
-                    p_val = span - r + phase;
-                if (p_val == 0u)
-                    p_val = span;
+                    cd = span; /* at phase tick; if blocked by other ch, next cycle */
             }
         }
         LOCK_VAR();
         if (ch == 0) {
             g_tVar.S1.blow_status = sc->blow_flag ? 1u : 0u;
-            g_tVar.S1.blow_countdown = (uint16_t)(p_val > 65535u ? 65535u : p_val);
+            g_tVar.S1.blow_countdown = (uint16_t)(cd > 65535u ? 65535u : cd);
         } else {
             g_tVar.S2.blow_status = sc->blow_flag ? 1u : 0u;
-            g_tVar.S2.blow_countdown = (uint16_t)(p_val > 65535u ? 65535u : p_val);
+            g_tVar.S2.blow_countdown = (uint16_t)(cd > 65535u ? 65535u : cd);
         }
         UNLOCK_VAR();
     }
