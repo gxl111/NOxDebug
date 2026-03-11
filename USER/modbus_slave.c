@@ -510,7 +510,8 @@ static void MODS_03H(void)
     uint16_t reg;
     uint16_t num;
     uint16_t i;
-    uint8_t reg_value[128];
+    /* 100 registers * 2 bytes; allows Mbpoll-style 03 read of 0x0064 words in one frame */
+    uint8_t reg_value[200];
 
     g_tModS.RspCode = RSP_OK;
 
@@ -533,11 +534,12 @@ static void MODS_03H(void)
 //        g_tModS.RspCode = RSP_ERR_VALUE;					/* ??????????? */
 //        goto err_ret;    
 //    }
-    if (num > sizeof(reg_value) / 2)
-	{
-		g_tModS.RspCode = RSP_ERR_VALUE;					/* ??????????? */
-		goto err_ret;
-	}
+    /* Max 100 registers per 03H (200 bytes payload); Modbus spec allows up to 125 */
+    if (num == 0u || num > 100u)
+    {
+        g_tModS.RspCode = RSP_ERR_VALUE;
+        goto err_ret;
+    }
     
     /* ?????????????reg_value???? */
     for (i = 0; i < num; i++)

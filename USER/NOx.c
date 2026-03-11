@@ -110,17 +110,17 @@ void NOxReceive(void *argument)
             float n1 = Var_Read_SensorLiveNox(0), o1 = Var_Read_SensorLiveO2(0);
             float n2 = Var_Read_SensorLiveNox(1), o2 = Var_Read_SensorLiveO2(1);
             uint16_t st1 = Var_Read_SensorStatus(0), st2 = Var_Read_SensorStatus(1);
-            snprintf((char *)buf, sizeof(buf), "S1 NOx %5.2f O2 %5.2f%%", (double)n1, (double)o1);
+            snprintf((char *)buf, sizeof(buf), "S1 NOx %5.2f O2 %5.2f     ", (double)n1, (double)o1);
             OLED_PrintASCIIString(0, 10, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
-            snprintf((char *)buf, sizeof(buf), "S1 state: %u", (unsigned)st1);
+            snprintf((char *)buf, sizeof(buf), "S1 state: %u              ", (unsigned)st1);
             OLED_PrintASCIIString(0, 18, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
-            snprintf((char *)buf, sizeof(buf), "S2 NOx %5.2f O2 %5.2f%%", (double)n2, (double)o2);
+            snprintf((char *)buf, sizeof(buf), "S2 NOx %5.2f O2 %5.2f     ", (double)n2, (double)o2);
             OLED_PrintASCIIString(0, 26, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
-            snprintf((char *)buf, sizeof(buf), "S2 state: %u", (unsigned)st2);
+            snprintf((char *)buf, sizeof(buf), "S2 state: %u              ", (unsigned)st2);
             OLED_PrintASCIIString(0, 34, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
-            snprintf((char *)buf, sizeof(buf), "Out NOx %5.2f O2 %5.2f%%", (double)NOx_ppm, (double)O2_pct);
+            snprintf((char *)buf, sizeof(buf), "Out NOx %5.2f O2 %5.2f    ", (double)NOx_ppm, (double)O2_pct);
             OLED_PrintASCIIString(0, 42, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
-            snprintf((char *)buf, sizeof(buf), "state: %u", (unsigned)Var_Read_OutputChStatus());
+            snprintf((char *)buf, sizeof(buf), "state: %u                 ", (unsigned)Var_Read_OutputChStatus());
             OLED_ColorMode c = (Var_Read_OutputChStatus() == 0x1FFu) ? OLED_COLOR_NORMAL : OLED_COLOR_REVERSED;
             OLED_PrintASCIIString(0, 50, (char *)buf, &afont8x6, c);
         }

@@ -108,7 +108,8 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define RSP_ERR_WRITE       0x04
 
 #define S_RX_BUF_SIZE       60
-#define S_TX_BUF_SIZE       128
+/* 03H read max 100 regs => 3 + 200 + 2 CRC; use 256 for margin */
+#define S_TX_BUF_SIZE       256
 
 typedef struct {
     uint8_t RxBuf[S_RX_BUF_SIZE];
