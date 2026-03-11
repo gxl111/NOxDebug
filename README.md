@@ -181,13 +181,15 @@ Only one sensor may be in blowback at a time (enforced in firmware).
 
 Example: set 40046 = 3600, 40047 = 60 for sensor 1 “blow 60 s every 3600 s”. Set 40084/40085 similarly for sensor 2. Write 40050 = 1 or 40088 = 1 for a single manual blow. Read status and countdown (40048/40049 and 40086/40087) for HMI display.
 
+- **Stagger:** Periodic blowback for **sensor 2 (ch1)** is offset by **5 minutes (300 s)** from sensor 1’s phase so the two paths do not request blowback at the same tick. Ch0 still fires at `tick % interval == 0`; ch1 fires when `tick % interval == (300 % interval)` (see **BLOW_STAGGER_SEC** in **app_config.h**). Only one valve can blow at a time; if one is already blowing, the other start is skipped until it finishes.
+
 ### 6.6 Work Mode (Dual-Sensor Strategy)
 
 - **Register 40012 (P34)** = work mode (R/W), 16-bit:
   - **Low byte (mode):**
     - **0** = **Single:** one channel drives P01/P02/P07 and 4–20 mA. Which channel is selected by the **high byte**: **0** = channel 0 (SA 0x52), **256 (0x0100)** = channel 1 (SA 0x51). Example: write **0** for single ch0, write **256** for single ch1.
-    - **1** = **Primary-backup (default):** use the first **valid** channel (0 then 1). If one channel is heating or fault (invalid), the other valid channel is used automatically. Both sensors’ data remain visible in their sensor blocks.
-    - **2** = **Fusion:** average NOx and O₂ over all valid channels; status from last valid. Higher effective accuracy when both sensors are healthy.
+    - **1** = **Primary-backup (default):** if **one path is in blowback**, output **always** uses the **other** path (P01/P02/4–20 mA). Otherwise use the first **valid** channel (0 then 1). If one channel is heating or fault (invalid), the other valid channel is used automatically. Both sensors’ data remain visible in their sensor blocks.
+    - **2** = **Fusion:** average NOx and O₂ over **valid channels that are not in blowback**; if only one path is not blowing, that path is used (even if not 0x1FF). When both are usable, averaging behaves as before.
 
 - **Default at power-up / after Register_Init:** P34 = **1** (primary-backup). Manual write to 40012 takes effect on the next strategy cycle (~50 ms).
 
@@ -209,7 +211,7 @@ Example: set 40046 = 3600, 40047 = 60 for sensor 1 “blow 60 s every 3600 s”.
 - Edit **USER/app_config.h** for:
   - **NOX_SENSOR_COUNT** (currently 2), **NOX_SENSOR_COUNT_MAX** (3 for future), **NOX_SENSOR_SA_LIST**.
   - Default NOx/O₂ conversion (slope/intercept), calibration Y values, alarm thresholds.
-  - Blowback default duration and interval, minimum duration.
+  - Blowback default duration and interval, minimum duration, **BLOW_STAGGER_SEC** (ch1 phase offset).
   - 4–20 mA full-scale ranges and J1939 heater CAN ID/payload.
 
 ---

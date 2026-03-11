@@ -27,6 +27,12 @@ typedef struct {
 
 static BlowCh_t s_ch[NOX_SENSOR_COUNT];
 
+uint8_t Blowback_IsChannelBlowing(uint8_t ch)
+{
+    if (ch >= NOX_SENSOR_COUNT) return 0u;
+    return s_ch[ch].blow_flag ? 1u : 0u;
+}
+
 static void Blow_Time_Out_Cb(TimerHandle_t xTimer)
 {
     uint8_t ch = (uint8_t)(uint32_t)pvTimerGetTimerID(xTimer);
@@ -160,8 +166,22 @@ static void Blowback_UpdateOne(uint8_t ch)
         sc->blowtime = sc->blowspan - 1u;
 
     uint32_t tick = time_1s_blow;
-    if (sc->blowspan != 0u && tick != 0u && (tick % sc->blowspan == 0u) && !sc->blow_flag)
-        BLOW_CONTROL(ch, 1);
+    if (sc->blowspan != 0u && tick != 0u && !sc->blow_flag) {
+        /* Ch0: fire at tick % span == 0. Ch1: fire at tick % span == stagger (mod span) to offset ~5 min. */
+        uint8_t fire = 0u;
+        if (ch == 0u) {
+            if (tick % sc->blowspan == 0u)
+                fire = 1u;
+        } else {
+            uint32_t phase = BLOW_STAGGER_SEC % sc->blowspan;
+            if (phase == 0u)
+                phase = sc->blowspan / 2u ? sc->blowspan / 2u : 1u; /* avoid same phase as ch0 */
+            if ((tick % sc->blowspan) == phase)
+                fire = 1u;
+        }
+        if (fire)
+            BLOW_CONTROL(ch, 1);
+    }
 
     {
         uint32_t p_val;
@@ -172,9 +192,22 @@ static void Blowback_UpdateOne(uint8_t ch)
         } else {
             if (sc->blowspan == 0u)
                 p_val = 0u;
-            else {
+            else if (ch == 0u) {
                 uint32_t remainder = tick % sc->blowspan;
                 p_val = (remainder == 0u) ? sc->blowspan : (sc->blowspan - remainder);
+            } else {
+                /* Ch1: countdown to next blow at phase BLOW_STAGGER_SEC % span */
+                uint32_t span = sc->blowspan;
+                uint32_t phase = BLOW_STAGGER_SEC % span;
+                if (phase == 0u)
+                    phase = span / 2u ? span / 2u : 1u;
+                uint32_t r = tick % span;
+                if (r <= phase)
+                    p_val = phase - r;
+                else
+                    p_val = span - r + phase;
+                if (p_val == 0u)
+                    p_val = span;
             }
         }
         LOCK_VAR();

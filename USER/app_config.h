@@ -34,6 +34,8 @@
 #define DEFAULT_BLOW_INTERVAL   3600u
 /** Minimum blowback duration (s); P25 below this is clamped to avoid timer period 0. */
 #define BLOW_DURATION_MIN_S     1u
+/** Stagger between ch0 and ch1 periodic blowback start (s). Ch1 fires at (n*interval + stagger). */
+#define BLOW_STAGGER_SEC        300u
 
 /* 4–20 mA output: full-scale NOx (ppm) and O2 (%) */
 #define NOX_FS_PPM   2500.0f

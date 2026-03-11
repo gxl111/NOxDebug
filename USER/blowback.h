@@ -12,6 +12,9 @@
 /* Turn blowback valve on (1) or off (0). ch=0: Relay0/1, ch=1: Relay2/3. */
 void BLOW_CONTROL(uint8_t ch, uint8_t state);
 
+/** 1 if channel is currently in blowback (use other channel for output when dual-sensor). */
+uint8_t Blowback_IsChannelBlowing(uint8_t ch);
+
 /* Run each cycle from NOxDefault: update both valves from P24-P28 and P29-P33. */
 void Blowback_Update(void);
 

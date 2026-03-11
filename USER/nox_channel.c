@@ -5,7 +5,18 @@
  */
 #include "nox_channel.h"
 #include "app_config.h"
+#include "blowback.h"
 #include <string.h>
+
+/* When a channel is in blowback, output must use the other path (gas path is purge). */
+static void copy_channel_out(uint8_t ch, float *nox_ppm, float *o2_pct, uint16_t *state)
+{
+    if (ch >= NOX_SENSOR_COUNT) ch = 0u;
+    NoxChannel_t *c = &g_noxChannels[ch];
+    if (nox_ppm) *nox_ppm = c->nox_ppm;
+    if (o2_pct) *o2_pct = c->o2_pct;
+    if (state) *state = c->state;
+}
 
 /* Source addresses: [0]=outlet 0x52, [1]=inlet 0x51 (see Electrical Interface doc). */
 static const uint8_t s_sa_list[] = { 0x52u, 0x51u };
@@ -102,51 +113,66 @@ void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state)
     uint8_t valid_count = 0u;
 
     if (s_work_mode == NOX_MODE_SINGLE) {
-        /* Use selected channel (0 or 1, from P34 high byte). */
+        /* Use selected channel; if that channel is blowing, use the other (dual-sensor). */
         uint8_t ch = (s_single_channel_index < NOX_SENSOR_COUNT) ? s_single_channel_index : 0u;
-        NoxChannel_t *c = &g_noxChannels[ch];
-        n = c->nox_ppm;
-        o = c->o2_pct;
-        s = c->state;
-        if (nox_ppm) *nox_ppm = n;
-        if (o2_pct) *o2_pct = o;
-        if (state) *state = s;
+        if (NOX_SENSOR_COUNT >= 2u && Blowback_IsChannelBlowing(ch)) {
+            uint8_t other = 1u - ch;
+            if (!Blowback_IsChannelBlowing(other)) {
+                copy_channel_out(other, nox_ppm, o2_pct, state);
+                return;
+            }
+        }
+        copy_channel_out(ch, nox_ppm, o2_pct, state);
         return;
     }
 
     if (s_work_mode == NOX_MODE_PRIMARY_BACKUP) {
-        /* Use first valid channel (e.g. if one is heating, use the other). */
+        /* If one path is in blowback, always use the other (not blowing) path. */
+        if (NOX_SENSOR_COUNT >= 2u) {
+            if (Blowback_IsChannelBlowing(0u) && !Blowback_IsChannelBlowing(1u)) {
+                copy_channel_out(1u, nox_ppm, o2_pct, state);
+                return;
+            }
+            if (Blowback_IsChannelBlowing(1u) && !Blowback_IsChannelBlowing(0u)) {
+                copy_channel_out(0u, nox_ppm, o2_pct, state);
+                return;
+            }
+        }
+        /* Neither blowing (or both blowing): use first valid channel 0 then 1. */
         for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
             if (NoxChannel_IsValid(ch)) {
-                NoxChannel_t *c = &g_noxChannels[ch];
-                if (nox_ppm) *nox_ppm = c->nox_ppm;
-                if (o2_pct) *o2_pct = c->o2_pct;
-                if (state) *state = c->state;
+                copy_channel_out(ch, nox_ppm, o2_pct, state);
                 return;
             }
         }
         /* No valid channel: keep last values from channel 0. */
-        NoxChannel_t *c = &g_noxChannels[0];
-        if (nox_ppm) *nox_ppm = c->nox_ppm;
-        if (o2_pct) *o2_pct = c->o2_pct;
-        if (state) *state = c->state;
+        copy_channel_out(0u, nox_ppm, o2_pct, state);
         return;
     }
 
     if (s_work_mode == NOX_MODE_FUSION) {
-        /* Average of all valid channels. */
+        /* Average valid channels that are not in blowback; if only one path usable, use it. */
         for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
+            if (Blowback_IsChannelBlowing(ch))
+                continue;
             if (NoxChannel_IsValid(ch)) {
                 NoxChannel_t *c = &g_noxChannels[ch];
                 n += c->nox_ppm;
                 o += c->o2_pct;
-                s = c->state; /* last valid state for status display */
+                s = c->state;
                 valid_count++;
             }
         }
         if (valid_count > 0u) {
             n /= (float)valid_count;
             o /= (float)valid_count;
+        } else if (NOX_SENSOR_COUNT >= 2u) {
+            /* Only one path not blowing but invalid: still use it for output (purge path wrong gas). */
+            if (!Blowback_IsChannelBlowing(0u) && Blowback_IsChannelBlowing(1u))
+                copy_channel_out(0u, nox_ppm, o2_pct, state);
+            else if (!Blowback_IsChannelBlowing(1u) && Blowback_IsChannelBlowing(0u))
+                copy_channel_out(1u, nox_ppm, o2_pct, state);
+            return;
         }
         if (nox_ppm) *nox_ppm = n;
         if (o2_pct) *o2_pct = o;
