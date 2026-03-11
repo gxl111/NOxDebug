@@ -4,7 +4,7 @@
 #include "stdlib.h"
 /*
 *********************************************************************************************************
-*	                                  用户代码包含的头文件
+*	                                  User application includes
 *********************************************************************************************************
 */
 #include "oled.h"
@@ -23,69 +23,69 @@ uint8_t spi_readwrite(uint8_t Txdata){
 	HAL_SPI_TransmitReceive(&hspi2,&Txdata,&Rxdata,1,100);
 	return Rxdata;
 }
-//SPI1波特率设置
+// SPI baud rate prescaler (hspi2)
 void SPI_setspeed(uint8_t speed){
 	hspi2.Init.BaudRatePrescaler = speed;
 }
 
 
-//发送命令，发完释放
+// Send command; CS toggled inside this routine.
 //
 int SD_sendcmd(uint8_t cmd, uint32_t arg, uint8_t crc)
 {
     uint8_t r1;
     uint16_t retry = 0xFFF;
 
-    SD_CS_DISABLE();  // 拉高确保前一个命令结束
-    spi_readwrite(0xFF);  // 给一位 NOP 时钟
-    SD_CS_ENABLE();  // 选中卡
+    SD_CS_DISABLE();  // Deassert CS so previous command completes
+    spi_readwrite(0xFF);  // One NOP clock
+    SD_CS_ENABLE();  // Assert CS (select card)
 
-    // 等待卡准备好
+// Wait until card is ready
     retry = 20;
     while (spi_readwrite(0xFF) != 0xFF && retry--) ;
     if (retry == 0) 
 	{
         SD_CS_DISABLE();
-        return 0xFF;  // 卡未准备好
+        return 0xFF;  // Card not ready
     }
 
-    // 发送命令包
-    spi_readwrite(cmd | 0x40);        // 命令字节（带起始位）
+// Send command packet
+    spi_readwrite(cmd | 0x40);        // Command byte (start bit set)
     spi_readwrite((arg >> 24) & 0xFF);
     spi_readwrite((arg >> 16) & 0xFF);
     spi_readwrite((arg >> 8) & 0xFF);
     spi_readwrite(arg & 0xFF);
-    spi_readwrite(crc);               // CRC（只有 CMD0 和 CMD8 需要有效）
+    spi_readwrite(crc);               // CRC (valid only for CMD0 and CMD8)
 
-    // CMD12 后必须多读取一个字节
+// After CMD12 clock one extra byte
     if (cmd == CMD12) spi_readwrite(0xFF);
 
-    // 等待响应（最多等待 20 个周期）
+// Wait for response (up to 20 clocks)
     retry = 20;
     do {
         r1 = spi_readwrite(0xFF);
     } while ((r1 & 0x80) && retry--);
 
-    return r1;  // 正常返回响应字节（R1 格式）
+    return r1;  // R1 response byte
 }
 
 
-//SD卡初始化
+// SD card initialization
 uint8_t SD_init(void)
 {
     uint8_t r1, i;
     uint8_t buff[4];
     uint16_t retry = 0;
 
-    // 降低 SPI 速率，初始化阶段使用低速
+// Lower SPI speed for init phase
     SPI_setspeed(SPI_BAUDRATEPRESCALER_256);
 
-    SD_CS_DISABLE();  // 先取消片选
-    for (i = 0; i < 10; i++) spi_readwrite(0xFF);  // 发送至少 74 个时钟以进入 SPI 模式
+    SD_CS_DISABLE();  // Deassert CS first
+    for (i = 0; i < 10; i++) spi_readwrite(0xFF);  // At least 74 clocks to enter SPI mode
 
-    SD_CS_ENABLE();  // 选中卡片
+    SD_CS_ENABLE();  // Assert CS
 
-    // 发送 CMD0，使 SD 卡进入 IDLE 状态
+// CMD0: put card in IDLE
     retry = 0x10;
     do {
         r1 = SD_sendcmd(CMD0, 0, 0x95);
@@ -93,17 +93,17 @@ uint8_t SD_init(void)
 
     if (retry == 0) {
         SD_CS_DISABLE();
-        return 1; // 卡无响应
+        return 1; // No response
     }
 
     SD_TYPE = 0;
-    r1 = SD_sendcmd(CMD8, 0x1AA, 0x87);  // 检测是否为 SD V2 卡
+    r1 = SD_sendcmd(CMD8, 0x1AA, 0x87);  // Check SD V2 card
 
     if (r1 == 0x01) {
-        // 收到 R7 响应
+// R7 response
         for (i = 0; i < 4; i++) buff[i] = spi_readwrite(0xFF);
         if (buff[2] == 0x01 && buff[3] == 0xAA) {
-            // 电压范围正确，尝试使用 HCS 初始化
+// Voltage OK; try HCS init
             retry = 0xFFFE;
             do {
                 SD_sendcmd(CMD55, 0, 0x01);
@@ -116,7 +116,7 @@ uint8_t SD_init(void)
             }
         }
     } else {
-        // 非 V2 卡，可能是 V1 或 MMC
+// Not V2; may be V1 or MMC
         retry = 0xFFF;
         do {
             SD_sendcmd(CMD55, 0, 0x01);
@@ -137,16 +137,16 @@ uint8_t SD_init(void)
         if (SD_sendcmd(CMD16, 512, 0x01) != 0) SD_TYPE = ERR;
     }
 
-    SD_CS_DISABLE(); // 释放 SD 卡
-    SPI_setspeed(SPI_BAUDRATEPRESCALER_2);  // 提高速率（后期通信）
+    SD_CS_DISABLE(); // Release SD card
+    SPI_setspeed(SPI_BAUDRATEPRESCALER_2);  // Higher speed for normal transfer
 
-    return (SD_TYPE ? 0 : 1);  // 0表示成功，1表示失败
+    return (SD_TYPE ? 0 : 1);  // 0 success, 1 fail
 }
 
  
 
 
-//读取指定长度数据
+// Read fixed-length data
 uint8_t SD_ReceiveData(uint8_t *data, uint16_t len)
 {
 
@@ -166,7 +166,7 @@ uint8_t SD_ReceiveData(uint8_t *data, uint16_t len)
   spi_readwrite(0xFF); 										  		
   return 0;
 }
-//向sd卡写入一个数据包的内容 512字节
+// Write one 512-byte block to SD
 uint8_t SD_SendBlock(uint8_t*buf,uint8_t cmd)
 {	
 	uint16_t t;	
@@ -176,22 +176,22 @@ uint8_t r1;
 	}while(r1!=0xFF);
 	
 	spi_readwrite(cmd);
-	if(cmd!=0XFD)//不是结束指令
+	if(cmd!=0XFD)// Not stop token
 	{
-		for(t=0;t<512;t++)spi_readwrite(buf[t]);//提高速度,减少函数传参时间
-	    spi_readwrite(0xFF);//忽略crc
+		for(t=0;t<512;t++)spi_readwrite(buf[t]);// Fast path: inline SPI
+	    spi_readwrite(0xFF);// Ignore CRC
 	    spi_readwrite(0xFF);
-		t=spi_readwrite(0xFF);//接收响应
-		if((t&0x1F)!=0x05)return 2;//响应错误									  					    
+		t=spi_readwrite(0xFF);// Read response token
+		if((t&0x1F)!=0x05)return 2;// Bad token
 	}						 									  					    
-    return 0;//写入成功
+    return 0;// Write OK
 }
 
-//获取CID信息
+// Read CID
 uint8_t SD_GETCID (uint8_t *cid_data)
 {
 		uint8_t r1;
-	  r1=SD_sendcmd(CMD10,0,0x01); //读取CID寄存器
+	  r1=SD_sendcmd(CMD10,0,0x01); // CMD10 read CID
 		if(r1==0x00){
 			r1=SD_ReceiveData(cid_data,16);
 		}
@@ -199,37 +199,37 @@ uint8_t SD_GETCID (uint8_t *cid_data)
 		if(r1)return 1;
 		else return 0;
 }
-//获取CSD信息
+// Read CSD
 uint8_t SD_GETCSD(uint8_t *csd_data){
 		uint8_t r1;	 
-    r1=SD_sendcmd(CMD9,0,0x01);//发CMD9命令，读CSD寄存器
+    r1=SD_sendcmd(CMD9,0,0x01);// CMD9 read CSD
     if(r1==0)
 	{
-    	r1=SD_ReceiveData(csd_data, 16);//接收16个字节的数据 
+    	r1=SD_ReceiveData(csd_data, 16);// 16 bytes
     }
-	SD_CS_DISABLE();//取消片选
+	SD_CS_DISABLE();// Deassert CS
 	if(r1)return 1;
 	else return 0;
 }
-//获取SD卡的总扇区数
+// Total sector count
 uint32_t SD_GetSectorCount(void)
 {
     uint8_t csd[16];
     uint32_t Capacity;  
     uint8_t n;
 		uint16_t csize;  					    
-	//取CSD信息，如果期间出错，返回0
+// Get CSD; return 0 on error
     if(SD_GETCSD(csd)!=0) return 0;	    
-    //如果为SDHC卡，按照下面方式计算
-    if((csd[0]&0xC0)==0x40)	 //V2.00的卡
+// SDHC capacity
+    if((csd[0]&0xC0)==0x40)	 // V2.00 card
     {	
 		csize = csd[9] + ((uint16_t)csd[8] << 8) + 1;
-		Capacity = (uint32_t)csize << 10;//得到扇区数	 		   
-    }else//V1.XX的卡
+		Capacity = (uint32_t)csize << 10;// Sector count
+    }else// V1.x card
     {	
 		n = (csd[5] & 15) + ((csd[10] & 128) >> 7) + ((csd[9] & 3) << 1) + 2;
 		csize = (csd[8] >> 6) + ((uint16_t)csd[7] << 2) + ((uint16_t)(csd[6] & 3) << 10) + 1;
-		Capacity= (uint32_t)csize << (n - 9);//得到扇区数   
+		Capacity= (uint32_t)csize << (n - 9);// Sector count
     }
     return Capacity;
 }
@@ -374,75 +374,75 @@ int MSD0_GetCardInfo(PMSD_CARDINFO SD0_CardInfo)
 }
 
 
-//写SD卡
-//buf:数据缓存区
-//sector:起始扇区
-//cnt:扇区数
-//返回值:0,ok;其他,失败.
+// Write SD card
+// buf: buffer
+// sector: start sector
+// cnt: sector count
+// return 0 ok else fail
 uint8_t SD_WriteDisk(uint8_t*buf,uint32_t sector,uint8_t cnt)
 {
 	uint8_t r1;
-	if(SD_TYPE!=V2HC)sector *= 512;//转换为字节地址
+	if(SD_TYPE!=V2HC)sector *= 512;// Byte address for non-HC
 	if(cnt==1)
 	{
-		r1=SD_sendcmd(CMD24,sector,0X01);//读命令
-		if(r1==0)//指令发送成功
+		r1=SD_sendcmd(CMD24,sector,0X01);// CMD24 single block write
+		if(r1==0)// Command accepted
 		{
-			r1=SD_SendBlock(buf,0xFE);//写512个字节	   
+			r1=SD_SendBlock(buf,0xFE);// Write 512 bytes
 		}
 	}else
 	{
 		if(SD_TYPE!=MMC)
 		{
 			SD_sendcmd(CMD55,0,0X01);	
-			SD_sendcmd(CMD23,cnt,0X01);//发送指令	
+			SD_sendcmd(CMD23,cnt,0X01);// Predefine block count
 		}
- 		r1=SD_sendcmd(CMD25,sector,0X01);//连续读命令
+ 		r1=SD_sendcmd(CMD25,sector,0X01);// CMD25 multi-block write
 		if(r1==0)
 		{
 			do
 			{
-				r1=SD_SendBlock(buf,0xFC);//接收512个字节	 
+				r1=SD_SendBlock(buf,0xFC);// Send 512-byte block
 				buf+=512;  
 			}while(--cnt && r1==0);
-			r1=SD_SendBlock(0,0xFD);//接收512个字节 
+			r1=SD_SendBlock(0,0xFD);// Stop token
 		}
 	}   
-	SD_CS_DISABLE();//取消片选
+	SD_CS_DISABLE();// Deassert CS
 	return r1;//
 }	
-//读SD卡
-//buf:数据缓存区
-//sector:扇区
-//cnt:扇区数
-//返回值:0,ok;其他,失败.
+// Read SD card
+// buf: buffer
+// sector: sector
+// cnt: sector count
+// return 0 ok else fail
 uint8_t SD_ReadDisk(uint8_t*buf,uint32_t sector,uint8_t cnt)
 {
 	uint8_t r1;
-	if(SD_TYPE!=V2HC)sector <<= 9;//转换为字节地址
+	if(SD_TYPE!=V2HC)sector <<= 9;// Byte address for non-HC
 	if(cnt==1)
 	{
-		r1=SD_sendcmd(CMD17,sector,0X01);//读命令
-		if(r1==0)//指令发送成功
+		r1=SD_sendcmd(CMD17,sector,0X01);// CMD17 read single block
+		if(r1==0)// Command accepted
 		{
-			r1=SD_ReceiveData(buf,512);//接收512个字节	   
+			r1=SD_ReceiveData(buf,512);// Read 512 bytes
 		}
 	}else
 	{
-		r1=SD_sendcmd(CMD18,sector,0X01);//连续读命令
+		r1=SD_sendcmd(CMD18,sector,0X01);// CMD18 multi-block read
 		do
 		{
-			r1=SD_ReceiveData(buf,512);//接收512个字节	 
+			r1=SD_ReceiveData(buf,512);// Read 512 bytes
 			buf+=512;  
 		}while(--cnt && r1==0); 	
-		SD_sendcmd(CMD12,0,0X01);	//发送停止命令
+		SD_sendcmd(CMD12,0,0X01);	// Stop transmission
 	}   
-	SD_CS_DISABLE();//取消片选
+	SD_CS_DISABLE();// Deassert CS
 	return r1;//
 }
 /*
 *********************************************************************************************************
-*	                                  用户代码
+*	                                  User application code
 *********************************************************************************************************
 */
 
@@ -455,14 +455,12 @@ typedef struct {
 //    Parameter NOx_p1;
 //    Parameter O2_p;
 //    Parameter O2_p1;
-    // 添加更多参数...
+    /* Add more fields here if needed */
 } SystemConfig;
-//默认无校验位，1个停止位
-//parit可以为0，1 ,2 无奇偶
-//StopBits可以为1 2
+/* Default: no parity, 1 stop bit. Parity 0/1/2; StopBits 1 or 2 */
 SystemConfig config = {
     .address=1,
-    .BaudRate = 115200,  // 默认值
+    .BaudRate = 115200,  /* default */
 //    .Parity=0,
     .StopBits=1,
 //    .NOx_p={DEFAULTNOX_A,DEFAULTNOX_B},
@@ -479,76 +477,76 @@ void WritetoSD(char filename[], BYTE write_buff[], uint8_t bufSize)
 	uint8_t res=0;
 	UINT Bw;	
 
-	res = SD_init();		//SD卡初始化
-	
+	res = SD_init();		/* SD init */
+
 	if(res == 1)
 	{
-		//printf("SD卡初始化失败! \r\n");
+		/* SD init failed (was printf) */
         OLED_PrintASCIIString(0, 30, "sd init failed", &afont16x8, OLED_COLOR_NORMAL);
 	}
 	else
 	{
-		//printf("SD卡初始化成功！ \r\n");
+		/* SD init ok (was printf) */
         OLED_PrintASCIIString(0, 30, "sd init succeed", &afont16x8, OLED_COLOR_NORMAL);
         OLED_ShowFrame();
 	}
 	
-	res=f_mount(&fs,"0:",1);		//挂载
-	
-//	if(test_sd == 0)		//用于测试格式化
-	if(res == FR_NO_FILESYSTEM)		//没有文件系统，格式化
+	res=f_mount(&fs,"0:",1);		/* mount volume */
+
+/* if(test_sd == 0) test format path */
+	if(res == FR_NO_FILESYSTEM)		/* no FS: format */
 	{
-//		test_sd =1;				//用于测试格式化
-		//printf("没有文件系统! \r\n");		
-		res = f_mkfs("", 0, 0);		//格式化sd卡
+/* test_sd = 1 */
+		/* no filesystem (was printf) */
+		res = f_mkfs("", 0, 0);		/* format SD */
 		if(res == FR_OK)
 		{
-			//printf("格式化成功! \r\n");		
-			res = f_mount(NULL,"0:",1); 		//格式化后先取消挂载
-			res = f_mount(&fs,"0:",1);			//重新挂载	
+			/* format ok (was printf) */
+			res = f_mount(NULL,"0:",1); 		/* unmount after mkfs */
+			res = f_mount(&fs,"0:",1);			/* remount */
 			if(res == FR_OK)
 			{
-				//printf("SD卡已经成功挂载，可以进进行文件写入测试!\r\n");
+				/* mount ok (was printf) */
                 OLED_PrintASCIIString(0, 30, "sd mount succeed", &afont16x8, OLED_COLOR_NORMAL);
                 OLED_ShowFrame();                   
 			}	
 		}
 		else
 		{
-			//printf("格式化失败! \r\n");		
+			/* format failed (was printf) */
 		}
 	}
 	else if(res == FR_OK)
 	{
-		//printf("挂载成功! \r\n");
+		/* mount ok (was printf) */
         OLED_PrintASCIIString(0, 30, "sd mount succeed", &afont16x8, OLED_COLOR_NORMAL);
         OLED_ShowFrame();
 	}
 	else
 	{
-		//printf("挂载失败! \r\n");
+		/* mount failed (was printf) */
         OLED_PrintASCIIString(0, 30, "sd mount failed", &afont16x8, OLED_COLOR_NORMAL);
 	}	
 
 	res = f_open(&file,filename,FA_OPEN_ALWAYS |FA_WRITE);
 	if((res & FR_DENIED) == FR_DENIED)
 	{
-//		printf("卡存储已满，写入失败!\r\n");		
+/* card full (was printf) */
 	}
-	
-	f_lseek(&file, f_size(&file));//确保写词写入不会覆盖之前的数据
+
+	f_lseek(&file, f_size(&file));/* append: do not overwrite */
 	if(res == FR_OK)
 	{
-//		printf("打开成功/创建文件成功！ \r\n");
+/* open ok (was printf) */
         OLED_PrintASCIIString(0, 30, "open succeed", &afont16x8, OLED_COLOR_NORMAL);
         OLED_ShowFrame();
-		res = f_write(&file,write_buff,bufSize,&Bw);		//写数据到SD卡
+		res = f_write(&file,write_buff,bufSize,&Bw);		/* write to SD */
 		if(res == FR_OK)
 		{
-//			printf("文件写入成功！ \r\n");
+/* write ok (was printf) */
             snprintf(sdbuffer,sizeof(sdbuffer),"w s%d",Bw);
             OLED_PrintASCIIString(0, 30,sdbuffer, &afont16x8, OLED_COLOR_NORMAL);	
-//            res = f_sync(&file); // 强制同步缓存到SD卡
+/* optional f_sync to flush */
 //            if (res == FR_OK) {
 //                OLED_PrintASCIIString(0, 30, "sync succeed", &afont16x8, OLED_COLOR_NORMAL);
 //            } else {
@@ -558,14 +556,14 @@ void WritetoSD(char filename[], BYTE write_buff[], uint8_t bufSize)
 		}
 		else
 		{
-//			printf("文件写入失败！ \r\n");
+/* write failed (was printf) */
             OLED_PrintASCIIString(0, 30, "write failed", &afont16x8, OLED_COLOR_NORMAL);	
 		}		
 	}
 	else
 	{
-//		printf("打开文件失败!\r\n");
-        
+/* open failed (was printf) */
+
         switch (res) {
             case FR_DISK_ERR: strcpy(sdbuffer, "Physical drive error\n"); break;
             case FR_INT_ERR: strcpy(sdbuffer,"Assertion failed\n"); break;
@@ -593,14 +591,14 @@ void WritetoSD(char filename[], BYTE write_buff[], uint8_t bufSize)
         OLED_ShowFrame();
 	}	
 	
-	f_close(&file);						//关闭文件		
-	//f_mount(NULL,"0:",1);		 //取消挂载
-	
+	f_close(&file);						/* close file */
+	/* f_mount(NULL,"0:",1); unmount */
+
 }
 
 
 
-// 读取配置文件并解析参数
+/* Read config file and parse key=value */
 FRESULT readConfig(const char* filename, SystemConfig* config) {
     FIL file;
     char sdbuffer[32];
@@ -610,7 +608,7 @@ FRESULT readConfig(const char* filename, SystemConfig* config) {
     uint8_t sd_res = 0;
     FRESULT res;
 
-    sd_res = SD_init();		//SD卡初始化
+    sd_res = SD_init();		/* SD init */
 	
 	if (sd_res == 1)
 	{
@@ -624,7 +622,7 @@ FRESULT readConfig(const char* filename, SystemConfig* config) {
         OLED_ShowFrame();		
 	}
 	
-	res = f_mount(&fs, "0:", 1);		//挂载
+	res = f_mount(&fs, "0:", 1);		/* mount */
 	if (res == FR_NO_FILESYSTEM)
     {
         OLED_PrintASCIIString(0, 30, "No Filesystem!", &afont16x8, OLED_COLOR_NORMAL);
@@ -674,12 +672,12 @@ FRESULT readConfig(const char* filename, SystemConfig* config) {
 //                config->O2_p1.b= (float)atof(value);
 //            }
 
-            // 添加更多参数...
+            /* add more keys here */
         }
     }
-    
-    f_close(&file);	
-	//f_mount(NULL,"0:",1);		 //取消挂载
+
+    f_close(&file);
+	/* optional unmount */
     
     return FR_OK;
 }
@@ -690,19 +688,19 @@ char newLine[32];
 char buf[20];
 FIL tmpFile;
 FIL file;
-// 更新配置文件中的参数
+/* Update one key=value in config file via temp file */
 FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newValue) {
     
     FRESULT res;
     static uint32_t n=0;
-    char tmpName[] = "temp.txt";  // 临时文件名
-    
+    char tmpName[] = "temp.txt";  /* temp file name */
+
     int found = 0;
     UINT bw;
-    // 创建新行
+    /* build new line */
     sprintf(newLine, "%s=%lu\r\n", key, (unsigned long)newValue);
-       
-    // 打开原文件
+
+    /* open source file */
     res = f_open(&file, filename, FA_READ);
     if(res != FR_OK){
         ++n;
@@ -710,11 +708,9 @@ FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newVal
          OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
          OLED_ShowFrame();        
          return res;
-    } 
-    
- 
-    // 创建临时文件
-    
+    }
+
+    /* create temp file */
     res = f_open(&tmpFile, tmpName, FA_WRITE | FA_CREATE_ALWAYS);
     if(res != FR_OK) {
         f_close(&file);
@@ -724,14 +720,14 @@ FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newVal
         OLED_ShowFrame();
         return res;
     }
-    
-    // 逐行处理
+
+    /* copy lines; replace matching key */
     while(f_gets(getbuffer, sizeof(getbuffer), &file)) {
         
         char currentKey[32];
         if(sscanf(getbuffer, "%31[^=]", currentKey) == 1) {
             if(strcmp(currentKey, key) == 0) {
-                f_write(&tmpFile, newLine, strlen(newLine), &bw);  // 替换为新值
+                f_write(&tmpFile, newLine, strlen(newLine), &bw);  /* write new line */
                 found = 1;
                 continue;
             }else{
@@ -740,19 +736,18 @@ FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newVal
            
         }
          memset(getbuffer, 0, sizeof(getbuffer));
-        //f_puts(sdbuffer, &tmpFile);  // 保留原行
+        /* keep original line */
     }
-    
-    // 如果参数不存在则添加
+
+    /* append key if missing */
     if(!found)
         f_write(&tmpFile, newLine, strlen(newLine), &bw);  
         //f_puts(newLine, &tmpFile);
     
     f_close(&file);
     f_close(&tmpFile);
-    
-       
-    // 原文件换名字
+
+    /* rename original aside */
     res = f_rename(filename, "config1.txt");
     if (res != FR_OK) {
         res = f_unlink(tmpName);
@@ -761,11 +756,11 @@ FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newVal
         OLED_ShowFrame();
         return res;
     }
-    
-    //零时文件换位原文件的名字
+
+    /* promote temp to config.txt */
     res = f_rename(tmpName, "config.txt");
     if (res != FR_OK) {
-        //失败换回原文件的名字
+        /* rollback */
         res = f_rename("config1.txt", "config.txt");
         res = f_unlink(tmpName);
         
@@ -792,12 +787,11 @@ FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newVal
 
 void handleConfig(void) {
 
-    
-    // 读取配置
+    /* load config from SD */
     if(readConfig("config.txt", &config) == FR_OK) {
        OLED_PrintASCIIString(0, 30, "read succeed      ", &afont16x8, OLED_COLOR_NORMAL);
-        
-        //配置初始化
+
+        /* apply to UART/Modbus */
         SBAUD485=config.BaudRate;
         SADDR485=config.address;
 //        NOx_parameter= config.NOx_p;
@@ -840,13 +834,13 @@ void handleConfig(void) {
 }
 
 
-//毫秒级的延时
+/* Busy-wait delay (~ms); tune i for CPU clock */
 void delay_ms(uint16_t time)
-{    
-   uint16_t i=0;  
+{
+   uint16_t i=0;
    while(time--)
    {
-      i=12000;  //自己定义
+      i=12000;  /* loop count per ms */
       while(i--) ;    
    }
 }

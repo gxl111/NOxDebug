@@ -13,7 +13,7 @@
 #define BLOW_FLASH_MAGIC    0x424C5746u   /* 'BLWF' */
 #define NUM_FLASH_WORDS     (NUM_FLASH_FLOATS + 1 + 4)
 
-/* 闂傚牊鐟﹂埀锟芥担铏瑰�勯柛鎰�褰冪亸锟� */
+/* Working buffer: 24 floats packed to Flash words before program */
 static float s_flash_src[NUM_FLASH_FLOATS];
 static uint32_t s_flash_data32[NUM_FLASH_WORDS];
 

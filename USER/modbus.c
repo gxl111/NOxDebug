@@ -36,7 +36,7 @@ const uint8_t s_CRCHi[] = {
     0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
     0x80, 0x41, 0x00, 0xC1, 0x81, 0x40
 } ;
-// CRC 低位字节值表
+/* CRC-16 (Modbus) low byte lookup table */
 const uint8_t s_CRCLo[] = {
     0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2, 0xC6, 0x06,
     0x07, 0xC7, 0x05, 0xC5, 0xC4, 0x04, 0xCC, 0x0C, 0x0D, 0xCD,
@@ -75,12 +75,12 @@ Baud rate	Bit rate	 Bit time	 Character time	  3.5 character times
   9600	    9600 bits/s	  104 us	      1.2 ms	      4.0 ms
  19200	   19200 bits/s    52 us	      573 us	      2.0 ms
  38400	   38400 bits/s	   26 us	      286 us	      1.75 ms(1.0 ms)
- 115200	   115200 bit/s	  8.7 us	       95 us	      1.75 ms(0.33 ms) 后面固定都为1750us
+ 115200	   115200 bit/s	  8.7 us	       95 us	      1.75 ms(0.33 ms); above 38400 fixed at 1750 us
 */
 
 const MODBUSBPS_T ModbusBaudRate[] =
 {
-    {2400,	16000}, /* 波特率2400bps, 3.5字符延迟时间16000us */
+    {2400,	16000}, /* 2400 bps, 3.5 char time = 16000 us */
     {4800,	 8000},
     {9600,	 4000},
     {19200,	 2000},
@@ -91,9 +91,9 @@ const MODBUSBPS_T ModbusBaudRate[] =
 };
 const int MODBUS_BAUD_RATE_LEN =(sizeof(ModbusBaudRate)/sizeof(ModbusBaudRate[0])) ;
 
-//存放从机的数据
+/* Slave RX byte buffer */
 uint8_t rx_data;
-//存放主机的数据
+/* Host RX byte buffer */
 uint8_t rx_data_h;
 
 
@@ -101,30 +101,21 @@ RS485_State_t rs485_state = {0};
 RS485_State_t rs485_state_h={0};
 
 /*
-*********************************************************************************************************
-*	函 数 名: CRC16_Modbus
-*	功能说明: 计算CRC。 用于Modbus协议。
-*	形    参: _pBuf : 参与校验的数据
-*			  _usLen : 数据长度
-*	返 回 值: 16位整数值。 对于Modbus ，此结果高字节先传送，低字节后传送。
-*
-*   所有可能的CRC值都被预装在两个数组当中，当计算报文内容时可以简单的索引即可；
-*   一个数组包含有16位CRC域的所有256个可能的高位字节，另一个数组含有低位字节的值；
-*   这种索引访问CRC的方式提供了比对报文缓冲区的每一个新字符都计算新的CRC更快的方法；
-*
-*  注意：此程序内部执行高/低CRC字节的交换。此函数返回的是已经经过交换的CRC值；也就是说，该函数的返回值可以直接放置
-*        于报文用于发送；
-*********************************************************************************************************
-*/
+ * CRC16_Modbus - Compute Modbus RTU CRC-16.
+ * _pBuf : data buffer, _usLen : length.
+ * Return: 16-bit CRC in Modbus wire order (high byte first on bus).
+ * Uses precomputed hi/lo tables for speed vs per-byte polynomial step.
+ * Note: returned value is already in byte order for appending to frame.
+ */
 uint16_t CRC16_Modbus(uint8_t *_pBuf, uint16_t _usLen)
 {
-    uint8_t ucCRCHi = 0xFF; /* 高CRC字节初始化 */
-    uint8_t ucCRCLo = 0xFF; /* 低CRC 字节初始化 */
-    uint16_t usIndex;  /* CRC循环中的索引 */
+    uint8_t ucCRCHi = 0xFF; /* CRC high byte init */
+    uint8_t ucCRCLo = 0xFF; /* CRC low byte init */
+    uint16_t usIndex;       /* table index */
 
     while (_usLen--)
     {
-        usIndex = ucCRCHi ^ *_pBuf++; /* 计算CRC */
+        usIndex = ucCRCHi ^ *_pBuf++; /* update CRC */
         ucCRCHi = ucCRCLo ^ s_CRCHi[usIndex];
         ucCRCLo = s_CRCLo[usIndex];
     }
@@ -132,30 +123,17 @@ uint16_t CRC16_Modbus(uint8_t *_pBuf, uint16_t _usLen)
 }
 
 /*
-*********************************************************************************************************
-*	函 数 名: BEBufToUint16
-*	功能说明: 将2字节数组(大端Big Endian次序，高字节在前)转换为16位整数
-*	形    参: _pBuf : 数组
-*	返 回 值: 16位整数值
-*
-*   大端(Big Endian)与小端(Little Endian)
-*********************************************************************************************************
-*/
+ * BEBufToUint16 - Parse 2 bytes big-endian to uint16_t.
+ * _pBuf[0] = high byte, _pBuf[1] = low byte.
+ */
 uint16_t BEBufToUint16(uint8_t *_pBuf)
 {
     return (((uint16_t)_pBuf[0] << 8) | _pBuf[1]);
 }
 
 /*
-*********************************************************************************************************
-*	函 数 名: RS485相关 主要RS485_Send_Data_IT
-*	功能说明: 调用RS485_Send_Data_IT进行中断发送
-*	形    参: uint8_t *pData：发送数据数组
-*			  uint16_t Size：数据长度
-*	返 回 值: 无
-*   调用RS485_Send_Data_IT进行中断发送会自动对收发引脚进行配置
-*********************************************************************************************************
-*/
+ * RS485 TX/RX direction helpers; IT send switches DE pin automatically via TxCplt callback.
+ */
 
 
 
@@ -170,12 +148,12 @@ void RS485_Enable_RX(GPIO_TypeDef* port ,uint16_t pin) {
 
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-    //slave
+    /* Slave USART */
     if (huart->Instance == MODBUSUART) {
         RS485_Enable_RX(RS485_EN_PORT,RS485_EN_PIN);
         rs485_state.isSending = 0;
     }
-    //host
+    /* Host UART */
     if (huart->Instance == MODBUSUARTH) {
         RS485_Enable_RX(RS485_EN_PORT_H,RS485_EN_PIN_H);
         rs485_state_h.isSending = 0;
@@ -184,20 +162,16 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 }
 
 
-//modbus接受中断回调函数
- void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    //slave
+/* Modbus RX byte callback: one byte per IRQ, re-arm IT receive */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    /* Slave */
     if (huart->Instance == MODBUSUART) {
-        //接收到一个字节
         MODS_ReciveNew(rx_data);
-        //开启中断继续接受
         HAL_UART_Receive_IT(&MDSUARTx,&rx_data, 1);
     }
-    //host
-     if (huart->Instance == MODBUSUARTH) {
-        //接收到一个字节
+    /* Host */
+    if (huart->Instance == MODBUSUARTH) {
         MODH_ReciveNew(rx_data_h);
-        //开启中断继续接受
         HAL_UART_Receive_IT(&MDSUARTxH,&rx_data_h, 1);
     }
 }

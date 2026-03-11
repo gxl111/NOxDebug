@@ -7,7 +7,7 @@
 
 extern uint8_t SD_TYPE;
 
-//SD卡类型
+/* SD card type */
 #define ERR     	0x00
 #define MMC				0x01
 #define V1				0x02
@@ -17,34 +17,34 @@ extern uint8_t SD_TYPE;
 #define DUMMY_BYTE				 0xFF 
 #define MSD_BLOCKSIZE			 512
 
-/* SD_CS片选 */
+/* SD_CS chip select */
 #define SD_CS_DISABLE()   		HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET)
 #define SD_CS_ENABLE()   		HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET)
 
-//CMD定义
-#define CMD0    0       //卡复位
+/* CMD definitions */
+#define CMD0    0       /* GO_IDLE_STATE / card reset */
 #define CMD1    1
-#define CMD8    8       //命令8 ，SEND_IF_COND
-#define CMD9    9       //命令9 ，读CSD数据
-#define CMD10   10      //命令10，读CID数据
-#define CMD12   12      //命令12，停止数据传输
-#define CMD16   16      //命令16，设置SectorSize 应返回0x00
-#define CMD17   17      //命令17，读sector
-#define CMD18   18      //命令18，读Multi sector
-#define CMD23   23      //命令23，设置多sector写入前预先擦除N个block
-#define CMD24   24      //命令24，写sector
-#define CMD25   25      //命令25，写Multi sector
-#define CMD41   41      //命令41，应返回0x00
-#define CMD55   55      //命令55，应返回0x01
-#define CMD58   58      //命令58，读OCR信息
-#define CMD59   59      //命令59，使能/禁止CRC，应返回0x00
+#define CMD8    8       /* SEND_IF_COND */
+#define CMD9    9       /* Read CSD */
+#define CMD10   10      /* Read CID */
+#define CMD12   12      /* STOP_TRANSMISSION */
+#define CMD16   16      /* SET_BLOCKLEN; expect R1 0x00 */
+#define CMD17   17      /* READ_SINGLE_BLOCK */
+#define CMD18   18      /* READ_MULTIPLE_BLOCK */
+#define CMD23   23      /* SET_BLOCK_COUNT before multi write */
+#define CMD24   24      /* WRITE_BLOCK */
+#define CMD25   25      /* WRITE_MULTIPLE_BLOCK */
+#define CMD41   41      /* Expect R1 0x00 */
+#define CMD55   55      /* Expect R1 0x01 */
+#define CMD58   58      /* READ_OCR */
+#define CMD59   59      /* CRC on/off; expect R1 0x00 */
 
-//数据写入回应字意义
+/* Data token / write response */
 #define MSD_DATA_OK                0x05
 #define MSD_DATA_CRC_ERROR         0x0B
 #define MSD_DATA_WRITE_ERROR       0x0D
 #define MSD_DATA_OTHER_ERROR       0xFF
-//SD卡回应标记字
+/* SD R1 response bits */
 #define MSD_RESPONSE_NO_ERROR      0x00
 #define MSD_IN_IDLE_STATE          0x01
 #define MSD_ERASE_RESET            0x02
@@ -104,7 +104,7 @@ typedef struct               /* Card Specific Data */
 }
 MSD_CSD;
 
-typedef struct				 /*Card Identification Data*/
+typedef struct				 /* Card Identification Data */
 {
   uint8_t  ManufacturerID;       /* ManufacturerID */
   uint16_t OEM_AppliID;          /* OEM/Application ID */
@@ -156,5 +156,3 @@ void handleConfig(void);
 
 FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newValue);
 #endif
-
-

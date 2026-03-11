@@ -14,30 +14,30 @@ extern const ASCIIFont afont16x8;
 extern const ASCIIFont afont24x12;
 
 /**
- * @brief 字体结构体
- * @note  字库前4字节存储utf8编码 剩余字节存储字模数据
- * @note 字库数据可以使用波特律动LED取模助手生成(https://led.baud-dance.com)
+ * @brief Font descriptor
+ * @note  First 4 bytes of each glyph entry = UTF-8 code; remainder = bitmap
+ * @note  Glyph data can be generated with Baud-Dance LED font tool (https://led.baud-dance.com)
  */
 typedef struct Font {
-    uint8_t h;              // 字高度
-    uint8_t w;              // 字宽度
-    const uint8_t *chars;   // 字库 字库前4字节存储utf8编码 剩余字节存储字模数据
-    uint8_t len;            // 字库长度 超过256则请改为uint16_t
-    const ASCIIFont *ascii; // 缺省ASCII字体 当字库中没有对应字符且需要显示ASCII字符时使用
+    uint8_t h;              /* Glyph height */
+    uint8_t w;              /* Glyph width */
+    const uint8_t *chars;   /* Font table: UTF-8 prefix + bitmap per glyph */
+    uint8_t len;            /* Number of glyphs; use uint16_t if >256 */
+    const ASCIIFont *ascii; /* Fallback ASCII font when glyph not in table */
 } Font;
 
 extern const Font font16x16;
 
 /**
- * @brief 图片结构体
- * @note  图片数据可以使用波特律动LED取模助手生成(https://led.baud-dance.com)
+ * @brief Image descriptor
+ * @note  Image data from Baud-Dance LED tool (https://led.baud-dance.com)
  */
 typedef struct Image {
-    uint8_t w;           // 图片宽度
-    uint8_t h;           // 图片高度
-    const uint8_t *data; // 图片数据
+    uint8_t w;           /* Width */
+    uint8_t h;           /* Height */
+    const uint8_t *data; /* Bitmap */
 } Image;
 
 extern const Image bilibiliImg;
 
-#endif // __FONT_H
+#endif /* __FONT_H */
