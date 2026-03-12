@@ -37,7 +37,7 @@
 /** Stagger between ch0 and ch1 periodic blowback start (s). Ch1 fires at (n*interval + stagger). */
 #define BLOW_STAGGER_SEC        300u
 
-/* 4¨C20 mA output: full-scale NOx (ppm) and O2 (%) */
+/* 4-20 mA output: full-scale NOx (ppm) and O2 (%) */
 #define NOX_FS_PPM   2500.0f
 #define O2_FS_PCT    25.0f
 /* 4 mA = 4000, 20 mA = 20000 in internal units (e.g. 0.1 ?A or DAC step) */
@@ -56,10 +56,10 @@
 #define NOX_SENSOR_SA_LIST     { 0x52u, 0x51u }
 
 /*
- * ???????????? RAM ???? Flash????????
- * 1 = Register_Init ???? FactoryFlash_ProgramDefaults()???? Load???? FF ?? RAM??
- *    ?????? 0 ?????????????? Flash ?????
- * 0 = ??? Flash LoadRegistersFromFlash()?
+ * Factory Flash programming on boot:
+ * 1 = After Register_Init, run FactoryFlash_ProgramDefaults() then do not Load; RAM keeps FF until next boot.
+ *     Set back to 0 and rebuild for normal operation (Load on boot) or every boot will overwrite Flash.
+ * 0 = Normal: LoadRegistersFromFlash() on boot.
  */
 #define FACTORY_FLASH_PROGRAM_ON_BOOT   0
 

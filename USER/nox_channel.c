@@ -53,51 +53,32 @@ void NoxChannel_Init(void)
 }
 
 /*
- * Status Byte = CAN 载荷第 5 字节 data[4]（表 4.1.1）。
- * 文档约定：每两项为一组 2-bit 编码，须按 Bit1+Bit0、Bit3+Bit2… 一起解读，单 bit 无独立含义。
+ * Status Byte = CAN payload byte 4, data[4] (Electrical Interface Gen 2.8, table 4.1.1).
+ * Encoding is 2-bit fields; interpret Bit1+Bit0, Bit3+Bit2, etc. together—single bits have no meaning alone.
  *
- * ┌─────────────────────────────────────────────────────────────────────────────┐
- * │ Bit7..6  氧气读值稳定 (O2 Stable)           表 4.1.3d                        │
- * │ Bit5..4  氮氧化物读值稳定 (NOx Stable)      表 4.1.3c                        │
- * │ Bit3..2  传感器达到工作温度 (Sensor at Temp) 表 4.1.3b                     │
- * │ Bit1..0  电压在范围内 (Power in Range)     表 4.1.3a                       │
- * └─────────────────────────────────────────────────────────────────────────────┘
+ *   Bit7..6  O2 stable (table 4.1.3d)
+ *   Bit5..4  NOx stable (table 4.1.3c)
+ *   Bit3..2  Sensor at operating temperature (table 4.1.3b)
+ *   Bit1..0  Power in range (table 4.1.3a)
  *
- * 各 2-bit 取值含义（00/01/10/11）：
- *   电压在范围内 (Bit1 Bit0):
- *     00 = 电压不在范围内
- *     01 = 电压在范围内
- *     10 = 没有使用
- *     11 = 不允许使用（上电初始值；收到露点信号后由 11 变为 00）
- *   传感器达到温度 (Bit3 Bit2):
- *     00 = 传感器元件不在工作温度
- *     01 = 传感器元件在工作温度
- *     10 = 没有使用
- *     11 = 不允许使用（初始值；露点后变为 00）
- *   氮氧化物读值稳定 (Bit5 Bit4):
- *     00 = 氮氧化物信号无效
- *     01 = 氮氧化物信号有效
- *     10 = 没有使用
- *     11 = 不允许使用（初始值；露点后变为 00）
- *   氧气读值稳定 (Bit7 Bit6):
- *     00 = 氧气信号无效
- *     01 = 氧气信号有效
- *     10 = 没有使用
- *     11 = 不允许使用（初始值；露点后变为 00）
- *
- * 参考：Electrical Interface Gen 2.8 / APN_SNS_02_020 表 4.1.1、4.1.2、4.1.3a–d。
+ * Each 2-bit field (MSB..LSB of the pair):
+ *   00 = condition false / invalid / not at temp / out of range
+ *   01 = condition true / valid / at temp / in range
+ *   10 = not used
+ *   11 = not allowed (power-on default; after dew-point message may transition to 00)
+ * Ref: APN_SNS_02_020 tables 4.1.1, 4.1.2, 4.1.3a–d.
  */
 /* Build 9-bit state word from J1939 status/heater/FMI bytes (same as original NOx_Handle). */
 static uint16_t build_state(uint8_t statusByte, uint8_t heaterByte, uint8_t errNOx, uint8_t errO2)
 {
     uint16_t state = (1u << 8);
-    /* Bit1..0: 电压在范围内 (Power in Range)，有效 = 01b */
+    /* Bits 1..0: power in range; valid = 01b */
     uint8_t voltageInRange = statusByte & 0x03u;
-    /* Bit3..2: 传感器达到工作温度 (Sensor at Temp)，有效 = 01b */
+    /* Bits 3..2: sensor at temp; valid = 01b */
     uint8_t sensorAtTemp   = (statusByte >> 2) & 0x03u;
-    /* Bit5..4: 氮氧化物读值稳定 (NOx Stable)，有效 = 01b */
+    /* Bits 5..4: NOx stable; valid = 01b */
     uint8_t NOxStable      = (statusByte >> 4) & 0x03u;
-    /* Bit7..6: 氧气读值稳定 (O2 Stable)，有效 = 01b */
+    /* Bits 7..6: O2 stable; valid = 01b */
     uint8_t O2Stable       = (statusByte >> 6) & 0x03u;
     uint8_t heaterControl   = (heaterByte >> 5) & 0x03u;
     uint8_t errHeater      = heaterByte & 0x1Fu;
@@ -128,7 +109,7 @@ void NoxChannel_UpdateFromCan(uint8_t ch_index, const uint8_t *data)
     c->nox_ppm = NoxSensor_RawToValue(c->raw_nox, c->nox_x, &c->nox_low, &c->nox_high);
     c->o2_pct  = NoxSensor_RawToValue(c->raw_o2,  c->o2_x,  &c->o2_low,  &c->o2_high);
 
-    /* Byte 4 = Status Byte（见上文 2-bit 分组注释） */
+    /* Byte 4 = Status Byte (2-bit fields, see comment block above) */
     uint8_t statusByte = data[4];
     uint8_t heaterByte = data[5];
     uint8_t errNOx     = data[6] & 0x1Fu;
