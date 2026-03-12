@@ -38,6 +38,13 @@ void NoxChannel_Init(void);
 /**
  * Update channel from one J1939 8-byte payload (NOx_raw, O2_raw, status, heater, FMI).
  * Fills raw, ppm, pct, state, valid for the given channel.
+ *
+ * CAN 载荷字节序（表 4.1.1）:
+ *   data[0..1] NOx_raw, data[2..3] O2_raw,
+ *   data[4]    Status Byte — 8 位按 2-bit 一组，非逐 bit 独立含义：
+ *              Bit1..0 电压在范围内, Bit3..2 传感器达温,
+ *              Bit5..4 NOx 读值稳定, Bit7..6 O2 读值稳定；每组 01=有效/在范围内等，00/10/11 见 nox_channel.c 注释。
+ *   data[5]    Heater Byte, data[6] Error NOx, data[7] Error O2（FMI 低 5 位）。
  */
 void NoxChannel_UpdateFromCan(uint8_t ch_index, const uint8_t *data);
 
@@ -56,5 +63,11 @@ void NoxChannel_SetSingleChannelIndex(uint8_t ch_index);
  * Writes to *nox_ppm, *o2_pct (used as O₂ in Modbus P02/sensor blocks), *state for P01/P02/P07 and 4-20mA.
  */
 void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state);
+
+/**
+ * Channel currently driving the combined output (updated each strategy cycle).
+ * 0 = sensor 1 (SA 0x52), 1 = sensor 2 (SA 0x51), 2 = fusion (averaging both).
+ */
+uint8_t NoxChannel_GetActiveOutputChannel(void);
 
 #endif /* __NOX_CHANNEL_H */

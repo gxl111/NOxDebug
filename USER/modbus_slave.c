@@ -4,6 +4,7 @@
  */
 
 #include "modbus_slave.h"
+#include "nox_channel.h"
 #include "main.h"
 #include <string.h>
 #include "usart.h"
@@ -919,7 +920,19 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
             case SLAVE_REG_ALARM_O2_LO:     f_value = g_tVar.alarm_o2_lo; f_flag = 1; break;
             case SLAVE_REG_MA_NOX:          value = g_tVar.ma_nox; break;
             case SLAVE_REG_MA_O2:           value = g_tVar.ma_o2; break;
-            case SLAVE_REG_WORK_MODE:       value = g_tVar.work_mode; break;
+            case SLAVE_REG_WORK_MODE: {
+                /* Stored: low byte = mode; high byte only for single-mode channel select.
+                 * Readback for mode 1/2: high byte = active output channel (real-time):
+                 *   0x0101 = primary-backup + S2 driving; 0x0100 = mode1 + S1 driving.
+                 * Single mode (low byte 0): return stored value unchanged. */
+                uint16_t stored = g_tVar.work_mode;
+                uint8_t mode = (uint8_t)(stored & 0xFFu);
+                if (mode == 0u)
+                    value = stored;
+                else
+                    value = ((uint16_t)NoxChannel_GetActiveOutputChannel() << 8) | (uint16_t)mode;
+                break;
+            }
             default: UNLOCK_VAR(); return 0;
         }
         UNLOCK_VAR();
@@ -1026,7 +1039,16 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
             case SLAVE_REG_ALARM_O2_LO:     value1 = BEBufToUint16(reg_value + 2); g_tVar.alarm_o2_lo = RegistersToFloat_BE(value, value1); f_flag = 1; break;
             case SLAVE_REG_MA_NOX:          g_tVar.ma_nox = value; break;
             case SLAVE_REG_MA_O2:           g_tVar.ma_o2 = value; break;
-            case SLAVE_REG_WORK_MODE:       g_tVar.work_mode = value; break;
+            case SLAVE_REG_WORK_MODE: {
+                /* Single (mode 0): store full word (high byte = channel). Mode 1/2: store low byte only
+                 * so Flash/active channel readback does not persist stale high byte. */
+                uint8_t mode = (uint8_t)(value & 0xFFu);
+                if (mode == 0u)
+                    g_tVar.work_mode = value;
+                else
+                    g_tVar.work_mode = mode;
+                break;
+            }
             default: UNLOCK_VAR(); return 0;
         }
         UNLOCK_VAR();

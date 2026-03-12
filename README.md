@@ -92,7 +92,7 @@ Register layout: **common** (output, 4–20 mA, mode, alarm only), then **sensor
 | 40008–40009 | P13 | R/W | O₂ low alarm, float |
 | 40010 | P22 | R/W | 4–20 mA NOx code (written by host) |
 | 40011 | P23 | R/W | 4–20 mA O₂ code (written by host) |
-| 40012 | P34 | R/W | **Work mode (u16):** low byte 0=single, 1=primary-backup, 2=fusion; when single, high byte=channel (0=ch0, 256=ch1). Default 1. |
+| 40012 | P34 | R/W | **Work mode (u16):** low byte 0=single, 1=primary-backup, 2=fusion; when single, high byte=channel (0=ch0, 256=ch1). Default 1. **Readback (mode 1 or 2):** high byte is **active output channel** (real-time): 0=S1 driving, 256 (0x0100)=S2 driving, 512 (0x0200)=fusion both; e.g. **257 (0x0101)** = primary-backup with **S2** currently driving when S1 invalid. |
 
 ### 5.2 Sensor Block (same for sensor 1 and sensor 2)
 
@@ -132,6 +132,33 @@ Calibration applies **per sensor**: writing to sensor 1’s NOx/O₂ cal trigger
 | D05 | Reserved. |
 
 Only one sensor may be in blowback at a time (enforced in firmware).
+
+### 5.4 Status register bit map (P07, S1 status, S2 status)
+
+The **same 9-bit status word** is exposed as:
+
+| Modbus address | Role |
+|----------------|------|
+| **40005** | **P07** — status of the **current** output source (after work-mode strategy). |
+| **40017** | Sensor 1 (channel 0, SA 0x52) live status. |
+| **40055** | Sensor 2 (channel 1, SA 0x51) live status. |
+
+The value is a **16-bit holding register**; only **bits 0–8** are used.  
+**511 (decimal) = 0x01FF** means **all conditions OK** for that channel/output — the firmware treats this as **valid** for primary-backup selection and as “normal” on the OLED when **P07** is 0x1FF.
+
+| Bit | When **1** (set) | When **0** (clear) |
+|-----|------------------|--------------------|
+| **0** | **O₂ FMI OK** — O₂ fault code byte indicates no fault (FMI = 0x1F). | O₂ fault reported or FMI not “no error”. |
+| **1** | **NOx FMI OK** — NOx fault code byte indicates no fault (FMI = 0x1F). | NOx fault reported or FMI not “no error”. |
+| **2** | **Heater FMI OK** — heater byte low 5 bits = 0x1F (no heater fault). | Heater fault or FMI not “no error”. |
+| **3** | **Heater active** — heater control is in auto or heating slope (not stop/preheat). | Stop heating / preheat mode (heater not in normal heating control). |
+| **4** | **Power in range** — CAN Status Byte “voltage in range” field = 01b. | Supply out of range or status field not valid. |
+| **5** | **Sensor at temperature** — CAN Status Byte “sensor at temp” field = 01b. | Not at operating temperature yet. |
+| **6** | **O₂ signal valid** — CAN Status Byte “O₂ stable” field = 01b. | O₂ reading not stable/invalid. |
+| **7** | **NOx signal valid** — CAN Status Byte “NOx stable” field = 01b. | NOx reading not stable/invalid. |
+| **8** | **Reserved / always set** in current firmware (word is built with this bit set). | — |
+
+**Summary:** Read **40005** for the **combined** output health; read **40017** / **40055** per sensor. **511 (0x1FF)** = bits 0–8 all set = normal operation for that status word. Any cleared bit in 0–7 indicates the corresponding condition is not satisfied; bit 3 clear means heating is not in the active heating states.
 
 ---
 

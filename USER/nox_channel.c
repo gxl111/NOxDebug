@@ -8,10 +8,19 @@
 #include "blowback.h"
 #include <string.h>
 
+/* Last channel that actually drives P01/P02/P07 (0=S1/SA0x52, 1=S2/SA0x51; 2=fusion both). */
+static uint8_t s_active_output_channel = 0u;
+
+uint8_t NoxChannel_GetActiveOutputChannel(void)
+{
+    return s_active_output_channel;
+}
+
 /* When a channel is in blowback, output must use the other path (gas path is purge). */
 static void copy_channel_out(uint8_t ch, float *nox_ppm, float *o2_pct, uint16_t *state)
 {
     if (ch >= NOX_SENSOR_COUNT) ch = 0u;
+    s_active_output_channel = ch;
     NoxChannel_t *c = &g_noxChannels[ch];
     if (nox_ppm) *nox_ppm = c->nox_ppm;
     if (o2_pct) *o2_pct = c->o2_pct;
@@ -43,13 +52,52 @@ void NoxChannel_Init(void)
     }
 }
 
+/*
+ * Status Byte = CAN 载荷第 5 字节 data[4]（表 4.1.1）。
+ * 文档约定：每两项为一组 2-bit 编码，须按 Bit1+Bit0、Bit3+Bit2… 一起解读，单 bit 无独立含义。
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────────┐
+ * │ Bit7..6  氧气读值稳定 (O2 Stable)           表 4.1.3d                        │
+ * │ Bit5..4  氮氧化物读值稳定 (NOx Stable)      表 4.1.3c                        │
+ * │ Bit3..2  传感器达到工作温度 (Sensor at Temp) 表 4.1.3b                     │
+ * │ Bit1..0  电压在范围内 (Power in Range)     表 4.1.3a                       │
+ * └─────────────────────────────────────────────────────────────────────────────┘
+ *
+ * 各 2-bit 取值含义（00/01/10/11）：
+ *   电压在范围内 (Bit1 Bit0):
+ *     00 = 电压不在范围内
+ *     01 = 电压在范围内
+ *     10 = 没有使用
+ *     11 = 不允许使用（上电初始值；收到露点信号后由 11 变为 00）
+ *   传感器达到温度 (Bit3 Bit2):
+ *     00 = 传感器元件不在工作温度
+ *     01 = 传感器元件在工作温度
+ *     10 = 没有使用
+ *     11 = 不允许使用（初始值；露点后变为 00）
+ *   氮氧化物读值稳定 (Bit5 Bit4):
+ *     00 = 氮氧化物信号无效
+ *     01 = 氮氧化物信号有效
+ *     10 = 没有使用
+ *     11 = 不允许使用（初始值；露点后变为 00）
+ *   氧气读值稳定 (Bit7 Bit6):
+ *     00 = 氧气信号无效
+ *     01 = 氧气信号有效
+ *     10 = 没有使用
+ *     11 = 不允许使用（初始值；露点后变为 00）
+ *
+ * 参考：Electrical Interface Gen 2.8 / APN_SNS_02_020 表 4.1.1、4.1.2、4.1.3a–d。
+ */
 /* Build 9-bit state word from J1939 status/heater/FMI bytes (same as original NOx_Handle). */
 static uint16_t build_state(uint8_t statusByte, uint8_t heaterByte, uint8_t errNOx, uint8_t errO2)
 {
     uint16_t state = (1u << 8);
+    /* Bit1..0: 电压在范围内 (Power in Range)，有效 = 01b */
     uint8_t voltageInRange = statusByte & 0x03u;
+    /* Bit3..2: 传感器达到工作温度 (Sensor at Temp)，有效 = 01b */
     uint8_t sensorAtTemp   = (statusByte >> 2) & 0x03u;
+    /* Bit5..4: 氮氧化物读值稳定 (NOx Stable)，有效 = 01b */
     uint8_t NOxStable      = (statusByte >> 4) & 0x03u;
+    /* Bit7..6: 氧气读值稳定 (O2 Stable)，有效 = 01b */
     uint8_t O2Stable       = (statusByte >> 6) & 0x03u;
     uint8_t heaterControl   = (heaterByte >> 5) & 0x03u;
     uint8_t errHeater      = heaterByte & 0x1Fu;
@@ -80,6 +128,7 @@ void NoxChannel_UpdateFromCan(uint8_t ch_index, const uint8_t *data)
     c->nox_ppm = NoxSensor_RawToValue(c->raw_nox, c->nox_x, &c->nox_low, &c->nox_high);
     c->o2_pct  = NoxSensor_RawToValue(c->raw_o2,  c->o2_x,  &c->o2_low,  &c->o2_high);
 
+    /* Byte 4 = Status Byte（见上文 2-bit 分组注释） */
     uint8_t statusByte = data[4];
     uint8_t heaterByte = data[5];
     uint8_t errNOx     = data[6] & 0x1Fu;
@@ -152,6 +201,7 @@ void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state)
 
     if (s_work_mode == NOX_MODE_FUSION) {
         /* Average valid channels that are not in blowback; if only one path usable, use it. */
+        uint8_t last_valid_ch = 0u;
         for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
             if (Blowback_IsChannelBlowing(ch))
                 continue;
@@ -161,11 +211,14 @@ void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state)
                 o += c->o2_pct;
                 s = c->state;
                 valid_count++;
+                last_valid_ch = ch;
             }
         }
         if (valid_count > 0u) {
             n /= (float)valid_count;
             o /= (float)valid_count;
+            /* 2 = both averaged; 1 = only one valid channel contributing */
+            s_active_output_channel = (valid_count >= 2u) ? 2u : last_valid_ch;
         } else if (NOX_SENSOR_COUNT >= 2u) {
             /* Only one path not blowing but invalid: still use it for output (purge path wrong gas). */
             if (!Blowback_IsChannelBlowing(0u) && Blowback_IsChannelBlowing(1u))

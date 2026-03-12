@@ -40,7 +40,7 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_ALARM_O2_LO     40008   /* Alarm O2 low threshold (float, 2 regs) */
 #define SLAVE_REG_MA_NOX          40010   /* 4-20mA NOx raw (u16) */
 #define SLAVE_REG_MA_O2           40011   /* 4-20mA O2 raw (u16) */
-#define SLAVE_REG_WORK_MODE       40012   /* Work mode (u16): low byte 0=dual 1=single ch0 2=single ch1; high byte when mode=0: 0/1 select ch; 0x0100 = channel 1 */
+#define SLAVE_REG_WORK_MODE       40012   /* Work mode: low byte 0=single 1=primary-backup 2=fusion. Write single: high byte 0/256=ch. Read mode1/2: high byte=active ch 0/256/512 (S1/S2/both). */
 #define COMMON_REG_END            40012   /* End address of common block */
 
 /* ==================== Per-sensor registers (same layout each, 38 regs per channel) ==================== */
