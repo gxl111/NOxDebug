@@ -81,7 +81,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  //SCB->VTOR = FLASH_BASE | 0x00005000UL;/* �����ж���������ַ */
+  //SCB->VTOR = FLASH_BASE | 0x00005000UL;/* жַ */
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/

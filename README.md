@@ -92,7 +92,7 @@ Register layout: **common** (output, 4–20 mA, mode, alarm only), then **sensor
 | 40008–40009 | P13 | R/W | O₂ low alarm, float |
 | 40010 | P22 | R/W | 4–20 mA NOx code (written by host) |
 | 40011 | P23 | R/W | 4–20 mA O₂ code (written by host) |
-| 40012 | P34 | R/W | **Work mode (u16):** low byte 0=single, 1=primary-backup, 2=fusion; when single, high byte=channel (0=ch0, 256=ch1). Default 1. **Readback (mode 1 or 2):** high byte is **active output channel** (real-time): 0=S1 driving, 256 (0x0100)=S2 driving, 512 (0x0200)=fusion both; e.g. **257 (0x0101)** = primary-backup with **S2** currently driving when S1 invalid. |
+| 40012 | P34 | R/W | **Work mode:** write low byte 0/1/2; single also uses high byte 0 or 256 to select S1/S2. **Readback** always includes **runtime** high byte: **0/1 = S1/S2**, **2 = fusion average**, **0xFF = fault** — see **§5.5**. |
 
 ### 5.2 Sensor Block (same for sensor 1 and sensor 2)
 
@@ -159,6 +159,28 @@ The value is a **16-bit holding register**; only **bits 0–8** are used.
 | **8** | **Reserved / always set** in current firmware (word is built with this bit set). | — |
 
 **Summary:** Read **40005** for the **combined** output health; read **40017** / **40055** per sensor. **511 (0x1FF)** = bits 0–8 all set = normal operation for that status word. Any cleared bit in 0–7 indicates the corresponding condition is not satisfied; bit 3 clear means heating is not in the active heating states.
+
+### 5.5 Work mode — automatic switching and readback (P34 / 40012)
+
+**Stored (write) low byte** is still **0 = single**, **1 = primary-backup**, **2 = fusion**. The firmware **does not** change the stored mode when conditions change; it only changes **which path feeds P01/P02/P07/4–20 mA** and what you **read back** on **40012**.
+
+#### Priority (applies whenever output must be chosen)
+
+1. **Blowback** — If exactly one path is blowing, output **always** uses the **non-blowing** path (purge path must not drive the analog output). Same in single, primary-backup, and fusion.
+2. **Valid path (0x1FF)** — Prefer a channel that is **valid** and **not blowing** (order S1 then S2).
+3. **Fusion only when both valid and neither blowing** — **Average** NOx/O₂ only in that case. There is **no** “fusion with single path”; if fusion is selected but only one path qualifies, behaviour matches **primary-backup** (single source, readback high byte **0** or **1**, not **2**).
+4. **Both invalid / both blowing with no safe path** — Output still filled from **S1** for continuity, but readback high byte becomes **0xFF** (**fault**). **P07** will not be 0x1FF; HMI should treat as alarm.
+
+#### Readback high byte (real time)
+
+| High byte | Decimal (in 16-bit read) | Meaning |
+|-----------|---------------------------|--------|
+| **0** | 1 / 256* | **S1** is the current source (*256 only when low byte 0 and stored single S2 but degraded—readback replaces stored for display). |
+| **1** | 256 / 257 | **S2** is the current source (e.g. 257 = mode 1 + S2). |
+| **2** | 512 / 514 | **Fusion average** applied (both valid, neither blowing). |
+| **0xFF** | 65280 + mode (e.g. **65281** = 0xFF01) | **Fault** — no valid usable path; output is best-effort from S1. |
+
+OLED shows **src:S1 / S2 / FUSE / FAULT** accordingly.
 
 ---
 

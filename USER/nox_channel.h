@@ -66,8 +66,13 @@ void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state)
 
 /**
  * Channel currently driving the combined output (updated each strategy cycle).
- * 0 = sensor 1 (SA 0x52), 1 = sensor 2 (SA 0x51), 2 = fusion (averaging both).
+ * 0 = sensor 1 (SA 0x52), 1 = sensor 2 (SA 0x51), 2 = fusion average applied.
  */
 uint8_t NoxChannel_GetActiveOutputChannel(void);
+
+/**
+ * High byte for P34 readback: 0=S1, 1=S2, 2=fusion, 0xFF=fault (no valid path).
+ */
+uint8_t NoxChannel_GetWorkModeReadbackHighByte(void);
 
 #endif /* __NOX_CHANNEL_H */

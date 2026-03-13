@@ -734,16 +734,17 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
             case SLAVE_REG_MA_NOX:          value = g_tVar.ma_nox; break;
             case SLAVE_REG_MA_O2:           value = g_tVar.ma_o2; break;
             case SLAVE_REG_WORK_MODE: {
-                /* Stored: low byte = mode; high byte only for single-mode channel select.
-                 * Readback for mode 1/2: high byte = active output channel (real-time):
-                 *   0x0101 = primary-backup + S2 driving; 0x0100 = mode1 + S1 driving.
-                 * Single mode (low byte 0): return stored value unchanged. */
+                /* Stored: low byte = mode. Readback high byte = runtime source:
+                 *   0,1 = S1/S2; 2 = fusion average; 0xFF = fault (no valid path).
+                 * Single mode: same auto rules; if degraded/fault, high byte still set. */
                 uint16_t stored = g_tVar.work_mode;
                 uint8_t mode = (uint8_t)(stored & 0xFFu);
                 if (mode == 0u)
-                    value = stored;
+                    value = ((uint16_t)NoxChannel_GetWorkModeReadbackHighByte() << 8) | (uint16_t)mode;
+                else if (mode <= (uint8_t)NOX_MODE_FUSION)
+                    value = ((uint16_t)NoxChannel_GetWorkModeReadbackHighByte() << 8) | (uint16_t)mode;
                 else
-                    value = ((uint16_t)NoxChannel_GetActiveOutputChannel() << 8) | (uint16_t)mode;
+                    value = stored;
                 break;
             }
             default: UNLOCK_VAR(); return 0;
