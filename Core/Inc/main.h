@@ -95,7 +95,11 @@ void Error_Handler(void);
 #define Relay0_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-
+/* Reserved: sensor power control GPIO (used when SENSOR_POWER_GPIO_ENABLE=1 in app_config.h). Not yet assigned. */
+#define SENSOR_POWER0_Pin       GPIO_PIN_0
+#define SENSOR_POWER0_GPIO_Port GPIOA
+#define SENSOR_POWER1_Pin       GPIO_PIN_1
+#define SENSOR_POWER1_GPIO_Port GPIOA
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

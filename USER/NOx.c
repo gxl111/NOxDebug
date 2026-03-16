@@ -84,8 +84,7 @@ void NOxReceive(void *argument)
             NOx_HandleOne(&item.msg, item.channel_index);
         }
 
-        /* Work mode and single-channel index from register P34 / work_mode (0=single, 1=primary_backup, 2=fusion;
-         * when single: high byte = channel 0 or 1, e.g. 0=ch0, 0x0100=ch1). */
+        /* P34: mode 0 single (high byte = ch), mode 1 主从 (high byte = 主 ch), mode 2 fusion (no 主). */
         {
             uint16_t mode_u = Var_Read_WorkMode();
             if (mode_u <= (uint16_t)NOX_MODE_FUSION)
@@ -207,7 +206,9 @@ void Register_Init(void)
     g_tVar.S1.blow_countdown = (uint16_t)(Blowback_GetInterval() > 0u ? Blowback_GetInterval() : 0u);
     g_tVar.S2.blow_status = 0u;
     g_tVar.S2.blow_countdown = (uint16_t)(Blowback_GetIntervalCh1() > 0u ? Blowback_GetIntervalCh1() : 0u);
-    g_tVar.work_mode = 1u;   /* default: primary-backup */
+    g_tVar.S1.power_on = 1u; /* default on; GPIO control when SENSOR_POWER_GPIO_ENABLE */
+    g_tVar.S2.power_on = 1u;
+    g_tVar.work_mode = 1u;   /* default: mode1 主从 ch0 主 */
     UNLOCK_VAR();
 }
 

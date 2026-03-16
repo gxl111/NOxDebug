@@ -54,7 +54,7 @@ uint8_t NoxChannel_IsValid(uint8_t ch_index);
 /** Set work mode (called from NOx.c after reading P34). */
 void NoxChannel_SetWorkMode(NoxWorkMode_t mode);
 
-/** Set single-channel index (0 or 1). Only used when work mode is SINGLE. */
+/** Set single-channel index (0 or 1). Mode 0 = which channel; mode 1 = 主 channel for primary-backup. */
 void NoxChannel_SetSingleChannelIndex(uint8_t ch_index);
 
 /**
@@ -74,5 +74,11 @@ uint8_t NoxChannel_GetActiveOutputChannel(void);
  * High byte for P34 readback: 0=S1, 1=S2, 2=fusion, 0xFF=fault (no valid path).
  */
 uint8_t NoxChannel_GetWorkModeReadbackHighByte(void);
+
+/**
+ * Output sensor register (P35, read-only): 0b01 = sensor0 output, 0b10 = sensor1 output,
+ * 0b11 = fusion (both), 0b00 = fault (no valid path).
+ */
+uint8_t NoxChannel_GetOutputSensorReg(void);
 
 #endif /* __NOX_CHANNEL_H */

@@ -40,66 +40,69 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_ALARM_O2_LO     40008   /* Alarm O2 low threshold (float, 2 regs) */
 #define SLAVE_REG_MA_NOX          40010   /* 4-20mA NOx raw (u16) */
 #define SLAVE_REG_MA_O2           40011   /* 4-20mA O2 raw (u16) */
-#define SLAVE_REG_WORK_MODE       40012   /* Work mode: low byte 0=single 1=primary-backup 2=fusion. Write single: high byte 0/256=ch. Read mode1/2: high byte=active ch 0/256/512 (S1/S2/both). */
-#define COMMON_REG_END            40012   /* End address of common block */
+#define SLAVE_REG_WORK_MODE       40012   /* Work mode only: 0=single 1=primary-backup 2=fusion. Write: low byte mode; single uses high byte 0/256=ch0/ch1. */
+#define SLAVE_REG_OUTPUT_SENSOR   40013   /* P35 R-only: 0b01=S0, 0b10=S1, 0b11=fusion, 0b00=fault */
+#define COMMON_REG_END            40013   /* End address of common block */
 
 /* ==================== Per-sensor registers (same layout each, 38 regs per channel) ==================== */
-/* Layout order: live NOx, live O2, status | seg1 NOx/O2 A/B | seg2 NOx/O2 A/B | P2/P3 NOx/O2 | cal/blow ... */
-#define SENSOR_BASE_1    40013
-#define SENSOR_BASE_2    40051
-#define SENSOR_REG_COUNT 38
+/* Layout order: power_on | live NOx, live O2, status | seg1/seg2/P2/P3 | cal/blow ... */
+#define SENSOR_BASE_1    40014
+#define SENSOR_BASE_2    40053
+#define SENSOR_REG_COUNT 39
 
-/* Sensor channel 1 addresses (40013-40050) */
-#define SLAVE_REG_S1_LIVE_NOX    40013
-#define SLAVE_REG_S1_LIVE_O2     40015
-#define SLAVE_REG_S1_STATUS      40017
-#define SLAVE_REG_S1_SEG1_NOX_A  40018
-#define SLAVE_REG_S1_SEG1_NOX_B  40020
-#define SLAVE_REG_S1_SEG1_O2_A   40022
-#define SLAVE_REG_S1_SEG1_O2_B   40024
-#define SLAVE_REG_S1_SEG2_NOX_A  40026
-#define SLAVE_REG_S1_SEG2_NOX_B  40028
-#define SLAVE_REG_S1_SEG2_O2_A   40030
-#define SLAVE_REG_S1_SEG2_O2_B   40032
-#define SLAVE_REG_S1_P2_NOX      40034
-#define SLAVE_REG_S1_P2_O2       40036
-#define SLAVE_REG_S1_P3_NOX      40038
-#define SLAVE_REG_S1_P3_O2       40040
-#define SLAVE_REG_S1_NOX_CAL_TRIG 40042
-#define SLAVE_REG_S1_NOX_PT_SEL  40043
-#define SLAVE_REG_S1_O2_CAL_TRIG  40044
-#define SLAVE_REG_S1_O2_PT_SEL    40045
-#define SLAVE_REG_S1_BLOW_INT    40046
-#define SLAVE_REG_S1_BLOW_DUR    40047
-#define SLAVE_REG_S1_BLOW_STATUS 40048
-#define SLAVE_REG_S1_BLOW_CD     40049   /* R: idle=sec to next blow; blowing=sec left */
-#define SLAVE_REG_S1_BLOW_CMD    40050
+/* Sensor channel 1 addresses (40014-40051), first reg = power on (R/W, GPIO control reserved) */
+#define SLAVE_REG_S1_POWER        40014   /* R/W: 0=off 1=on, drives reserved GPIO when defined */
+#define SLAVE_REG_S1_LIVE_NOX    40015
+#define SLAVE_REG_S1_LIVE_O2     40017
+#define SLAVE_REG_S1_STATUS      40019
+#define SLAVE_REG_S1_SEG1_NOX_A  40020
+#define SLAVE_REG_S1_SEG1_NOX_B  40022
+#define SLAVE_REG_S1_SEG1_O2_A   40024
+#define SLAVE_REG_S1_SEG1_O2_B   40026
+#define SLAVE_REG_S1_SEG2_NOX_A  40028
+#define SLAVE_REG_S1_SEG2_NOX_B  40030
+#define SLAVE_REG_S1_SEG2_O2_A   40032
+#define SLAVE_REG_S1_SEG2_O2_B   40034
+#define SLAVE_REG_S1_P2_NOX      40036
+#define SLAVE_REG_S1_P2_O2       40038
+#define SLAVE_REG_S1_P3_NOX      40040
+#define SLAVE_REG_S1_P3_O2       40042
+#define SLAVE_REG_S1_NOX_CAL_TRIG 40044
+#define SLAVE_REG_S1_NOX_PT_SEL  40045
+#define SLAVE_REG_S1_O2_CAL_TRIG  40046
+#define SLAVE_REG_S1_O2_PT_SEL    40047
+#define SLAVE_REG_S1_BLOW_INT    40048
+#define SLAVE_REG_S1_BLOW_DUR    40049
+#define SLAVE_REG_S1_BLOW_STATUS 40050
+#define SLAVE_REG_S1_BLOW_CD     40051   /* R: idle=sec to next blow; blowing=sec left */
+#define SLAVE_REG_S1_BLOW_CMD    40052   /* 40014-40052 = 39 regs S1 */
 
-/* Sensor channel 2 addresses (40051-40088), same layout as channel 1 */
-#define SLAVE_REG_S2_LIVE_NOX    40051
-#define SLAVE_REG_S2_LIVE_O2     40053
-#define SLAVE_REG_S2_STATUS      40055
-#define SLAVE_REG_S2_SEG1_NOX_A  40056
-#define SLAVE_REG_S2_SEG1_NOX_B  40058
-#define SLAVE_REG_S2_SEG1_O2_A   40060
-#define SLAVE_REG_S2_SEG1_O2_B   40062
-#define SLAVE_REG_S2_SEG2_NOX_A  40064
-#define SLAVE_REG_S2_SEG2_NOX_B  40066
-#define SLAVE_REG_S2_SEG2_O2_A   40068
-#define SLAVE_REG_S2_SEG2_O2_B   40070
-#define SLAVE_REG_S2_P2_NOX      40072
-#define SLAVE_REG_S2_P2_O2       40074
-#define SLAVE_REG_S2_P3_NOX      40076
-#define SLAVE_REG_S2_P3_O2       40078
-#define SLAVE_REG_S2_NOX_CAL_TRIG 40080
-#define SLAVE_REG_S2_NOX_PT_SEL  40081
-#define SLAVE_REG_S2_O2_CAL_TRIG  40082
-#define SLAVE_REG_S2_O2_PT_SEL    40083
-#define SLAVE_REG_S2_BLOW_INT    40084
-#define SLAVE_REG_S2_BLOW_DUR    40085
-#define SLAVE_REG_S2_BLOW_STATUS 40086
-#define SLAVE_REG_S2_BLOW_CD     40087   /* R: idle=sec to next blow; blowing=sec left */
-#define SLAVE_REG_S2_BLOW_CMD    40088
+/* Sensor channel 2 addresses (40053-40091), same layout as channel 1 */
+#define SLAVE_REG_S2_POWER        40053
+#define SLAVE_REG_S2_LIVE_NOX    40054
+#define SLAVE_REG_S2_LIVE_O2     40056
+#define SLAVE_REG_S2_STATUS      40058
+#define SLAVE_REG_S2_SEG1_NOX_A  40059
+#define SLAVE_REG_S2_SEG1_NOX_B  40061
+#define SLAVE_REG_S2_SEG1_O2_A   40063
+#define SLAVE_REG_S2_SEG1_O2_B   40065
+#define SLAVE_REG_S2_SEG2_NOX_A  40067
+#define SLAVE_REG_S2_SEG2_NOX_B  40069
+#define SLAVE_REG_S2_SEG2_O2_A   40071
+#define SLAVE_REG_S2_SEG2_O2_B   40073
+#define SLAVE_REG_S2_P2_NOX      40075
+#define SLAVE_REG_S2_P2_O2       40077
+#define SLAVE_REG_S2_P3_NOX      40079
+#define SLAVE_REG_S2_P3_O2       40081
+#define SLAVE_REG_S2_NOX_CAL_TRIG 40083
+#define SLAVE_REG_S2_NOX_PT_SEL  40084
+#define SLAVE_REG_S2_O2_CAL_TRIG  40085
+#define SLAVE_REG_S2_O2_PT_SEL    40086
+#define SLAVE_REG_S2_BLOW_INT    40087
+#define SLAVE_REG_S2_BLOW_DUR    40088
+#define SLAVE_REG_S2_BLOW_STATUS 40089
+#define SLAVE_REG_S2_BLOW_CD     40090   /* R: idle=sec to next blow; blowing=sec left */
+#define SLAVE_REG_S2_BLOW_CMD    40091   /* 40053-40091 = 39 regs S2 */
 
 #define RSP_OK              0
 #define RSP_ERR_CMD         0x01
@@ -121,6 +124,7 @@ typedef struct {
 
 /* Per-channel sensor register mirror (same struct for S1 and S2) */
 typedef struct {
+    uint16_t power_on;   /* 0=off 1=on, drives reserved sensor power GPIO when defined */
     float    live_nox, live_o2;
     uint16_t status;
     float    seg1_nox_a, seg1_nox_b, seg1_o2_a, seg1_o2_b;
@@ -177,11 +181,15 @@ extern void Var_Write_MaO2(uint16_t value);
 extern uint16_t Var_Read_MaO2(void);
 extern void Var_Write_WorkMode(uint16_t value);
 extern uint16_t Var_Read_WorkMode(void);
-/** P34/work_mode: low byte = work mode (0/1/2), high byte = single-channel index (0 or 1) when mode=0.
- *  Single ch0: write 0, single ch1: write 0x0100 (256). */
+/** P34: mode0 写 0/256=ch0/ch1; mode1 写 1/257=ch0/ch1 主. Read returns channel index 0/1. */
 extern uint8_t Var_Read_SingleChannelIndex(void);
+/** P35 output sensor (40013, R-only): 0b01=S0 0b10=S1 0b11=fusion 0b00=fault. */
+extern uint8_t Var_Read_OutputSensorReg(void);
 
 /* Per-channel sensor accessors; ch=0 or 1, same layout as common block */
+extern uint16_t Var_Read_SensorPowerOn(uint8_t ch);
+extern void Var_Write_SensorPowerOn(uint8_t ch, uint16_t v);
+
 extern float  Var_Read_SensorLiveNox(uint8_t ch);
 extern float  Var_Read_SensorLiveO2(uint8_t ch);
 extern uint16_t Var_Read_SensorStatus(uint8_t ch);

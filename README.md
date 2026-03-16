@@ -1,309 +1,296 @@
-# NOxDebug – NOx Sensor Monitor & Debug System
+# NOxDebug – NOx 传感器监控与调试系统
 
-## 1. Overview
+## 1. 概述
 
-**NOxDebug** is an embedded application for **STM32F103RCT6** that acts as a **NOx (nitrogen oxides) sensor monitor and debug node**. It receives sensor data over **J1939/CAN**, supports **single- or dual-sensor** operation with configurable strategy (single / primary-backup / fusion), performs per-sensor two-segment linear calibration, drives **two independent blowback valves**, and exposes readings and parameters via **Modbus RTU**. It also acts as a Modbus master to write **4–20 mA** output values to an external current-output module.
+**NOxDebug** 是一款基于 **STM32F103RCT6** 的嵌入式应用，作为 **NOx（氮氧化物）传感器监控与调试节点**。通过 **J1939/CAN** 接收传感器数据，支持**单路或双路**传感器运行及可配置策略（单路 / 主备 / 融合），对每个传感器进行两段线性标定，驱动**两路独立反吹阀**，并通过 **Modbus RTU** 暴露读数和参数。同时作为 Modbus 主机，将 **4–20 mA** 输出值写入外部电流输出模块。
 
-**Main capabilities:**
+**主要功能：**
 
-- Receive NOx and O₂ data from **one or two** J1939-capable sensors: **SA 0x52** (channel 0, outlet) and **SA 0x51** (channel 1, inlet). Architecture is modular for future extension to three sensors.
-- **Work mode** (register 40012 / P34): **Low byte** = mode: **0** = single (one channel), **1** = primary-backup (first valid channel), **2** = fusion (average of valid channels). **High byte** = single-channel index when mode=0: **0** = channel 0 (SA 0x52), **256 (0x0100)** = channel 1 (SA 0x51). Default mode is **primary-backup**. A single **4–20 mA** output is driven by the current strategy result (NOx + O₂).
-- **Modbus register layout:** **Common** registers: NOx/O₂ output (P01/P02), output status (P07), 4–20 mA (P22/P23), work mode (P34), alarm thresholds (P12/P13). **Sensor registers:** two identical blocks (sensor 1: 40013–40050, sensor 2: 40051–40088), each with live NOx/O₂/status, calibration params, cal control, and blowback. No global “cal target”; each sensor’s cal trigger applies to that sensor.
-- Per-sensor two-segment linear calibration (3 points) for NOx and O₂; each channel has its own parameters and cal trigger/point select in its sensor block. Store calibration in internal Flash (S1 + S2 = 24 floats).
-- Modbus RTU **slave** on RS485 (USART1) for HMI/SCADA: read/write registers and coils.
-- Modbus RTU **master** on another RS485 (UART5) to drive an external 4–20 mA output module.
-- **Two blowback valves:** each sensor has the same blowback registers (interval, duration, status, countdown, command) in its block; Relay0/1 = ch0, Relay2/3 = ch1.
-- OLED display for current NOx, O₂, status, and run time.
-
----
-
-## 2. Hardware
-
-| Item | Description |
-|------|-------------|
-| **MCU** | STM32F103RCT6 (LQFP64), 72 MHz, HSE 8 MHz + PLL×9 |
-| **CAN** | 250 kbps, J1939; connects to NOx sensor |
-| **USART1** | 9600 baud (default), RS485, **Modbus slave** (HMI/PC) |
-| **UART5** | 9600 baud, RS485, **Modbus master** (4–20 mA module) |
-| **I2C1** | OLED (PB6 SCL, PB7 SDA) |
-| **SPI1** | SD card (FATFS); e.g. `config.txt` for baudrate |
-| **GPIO** | Relay0/1: blowback valve **ch0** (sensor 0); Relay2/3: blowback valve **ch1** (sensor 1) |
-
-Pin names and labels are defined in the CubeMX project (`NOx_RCT6.ioc`) and in `main.h`.
+- 从 **一或两个** 支持 J1939 的传感器接收 NOx 和 O₂ 数据：**SA 0x52**（通道 0，出口）和 **SA 0x51**（通道 1，入口）。架构模块化，便于将来扩展为三路传感器。
+- **工作模式**（寄存器 40012 / P34）：**低字节** = 模式：**0** = 单路（一路通道），**1** = 主备（第一个有效通道），**2** = 融合（有效通道平均）。**高字节** = 单路模式下的通道索引：**0** = 通道 0（SA 0x52），**256（0x0100）** = 通道 1（SA 0x51）。默认模式为 **主备**。单一的 **4–20 mA** 输出由当前策略结果（NOx + O₂）驱动。
+- **Modbus 寄存器布局**：**公共**寄存器：NOx/O₂ 输出（P01/P02）、输出状态（P07）、4–20 mA（P22/P23）、工作模式（P34）、输出传感器（P35 只读）、报警阈值（P12/P13）。**传感器寄存器**：两个结构相同的块（传感器 1：40014–40052，传感器 2：40053–40091），块首为上电寄存器（R/W，预留 GPIO），随后为实时 NOx/O₂/状态、标定参数、标定控制与反吹。无全局“标定目标”；每个传感器的标定触发仅作用于该传感器。
+- 每传感器 NOx 与 O₂ 的两段线性标定（3 点）；每通道有独立参数及本块内的标定触发/点选择。标定结果存入片内 Flash（S1 + S2 共 24 个 float）。
+- RS485（USART1）上的 Modbus RTU **从站**，供 HMI/SCADA 读写寄存器和线圈。
+- 另一路 RS485（UART5）上的 Modbus RTU **主站**，用于驱动外部 4–20 mA 输出模块。
+- **两路反吹阀**：每个传感器在其块内拥有相同的反吹寄存器（间隔、时长、状态、倒计时、命令）；Relay0/1 = 通道 0，Relay2/3 = 通道 1。
+- OLED 显示当前 NOx、O₂、状态及运行时间。
 
 ---
 
-## 3. Software Architecture
+## 2. 硬件
 
-- **HAL** + **FreeRTOS** (CMSIS-RTOS v2).
-- **Tasks:**
-  - **defaultTask**: placeholder.
-- **NOx_Default**: calibration polling (per sensor via each sensor’s cal trigger), alarm, blowback logic (both valves), run-time display, OLED refresh.
-- **ModBus_Slave**: Modbus slave poll (USART1), register and Flash access.
-- **NOx_Receive**: dequeue J1939 frames (with channel index 0/1), update per-channel data (**nox_channel**), apply work-mode strategy (single / primary-backup / fusion; single channel selectable via P34 high byte), update P01/P02/P07 and per-sensor live registers (S1/S2), fill 4–20 mA buffer, send heater command on CAN.
-  - **ModBus_Host**: periodically write 4–20 mA data to external slave (UART5) and read back for check.
+| 项目 | 说明 |
+|------|------|
+| **MCU** | STM32F103RCT6（LQFP64），72 MHz，HSE 8 MHz + PLL×9 |
+| **CAN** | 250 kbps，J1939；连接 NOx 传感器 |
+| **USART1** | 9600 波特（默认），RS485，**Modbus 从站**（HMI/PC） |
+| **UART5** | 9600 波特，RS485，**Modbus 主站**（4–20 mA 模块） |
+| **I2C1** | OLED（PB6 SCL，PB7 SDA） |
+| **SPI1** | SD 卡（FATFS）；如 `config.txt` 配置波特率 |
+| **GPIO** | Relay0/1：反吹阀 **通道 0**（传感器 0）；Relay2/3：反吹阀 **通道 1**（传感器 1） |
 
-- **Timers:** TIM6 (HAL tick), TIM7 (10 ms base for 100 ms / 1 s counters), TIM2/TIM3 (Modbus slave/host RX timeout).
-
-Key application code lives under **USER/**; sensor math and defaults are in **nox_sensor** and **app_config.h**. Logic is split into:
-
-- **NOx.c**: J1939 handle (per channel), tasks (NOxReceive, NOxDefault, ModBusSlave), register/Flash init, strategy (single / primary-backup / fusion).
-- **nox_channel.h/c**: Per-sensor channel state and params (raw, ppm, pct, state, valid, calibration); **NoxChannel_UpdateFromCan**, **NoxChannel_GetCurrentOutput**; modular for 2 or 3 sensors.
-- **blowback.c/h**: Two valves; each sensor has the same register set (interval, duration, status, countdown, command) in its block; **BLOW_CONTROL(ch, state)**; Relay0/1 and Relay2/3.
-- **calibration.c/h**: NOx/O₂ calibration per sensor (each sensor’s cal trigger and point select in its block), slope/intercept, **Calibration_Init**.
-- **alarm.c/h**: Alarm thresholds (P12/P13) and comparison with current output (P01/P02).
+引脚与标签在 CubeMX 工程（`NOx_RCT6.ioc`）及 `main.h` 中定义。
 
 ---
 
-## 4. Communication
+## 3. 软件架构
+
+- **HAL** + **FreeRTOS**（CMSIS-RTOS v2）。
+- **任务：**
+  - **defaultTask**：占位。
+  - **NOx_Default**：标定轮询（按各传感器标定触发）、报警、反吹逻辑（两路阀）、运行时间显示、OLED 刷新。
+  - **ModBus_Slave**：Modbus 从站轮询（USART1）、寄存器与 Flash 访问。
+  - **NOx_Receive**：出队 J1939 帧（带通道索引 0/1），更新每通道数据（**nox_channel**），应用工作模式策略（单路 / 主备 / 融合；单路通道由 P34 高字节选择），更新 P01/P02/P07 及每传感器实时寄存器（S1/S2），填充 4–20 mA 缓冲，发送 CAN 加热命令。
+  - **ModBus_Host**：周期将 4–20 mA 数据写入外部从站（UART5）并读回校验。
+
+- **定时器**：TIM6（HAL 节拍）、TIM7（10 ms 基准，用于 100 ms / 1 s 计数）、TIM2/TIM3（Modbus 从站/主机 RX 超时）。
+
+应用代码主要在 **USER/** 下；传感器数学与默认值在 **nox_sensor** 和 **app_config.h**。逻辑划分如下：
+
+- **NOx.c**：J1939 处理（每通道）、任务（NOxReceive、NOxDefault、ModBusSlave）、寄存器/Flash 初始化、策略（单路 / 主备 / 融合）。
+- **nox_channel.h/c**：每传感器通道状态与参数（原始值、ppm、%、状态、有效、标定）；**NoxChannel_UpdateFromCan**、**NoxChannel_GetCurrentOutput**；支持 2 或 3 路传感器扩展。
+- **blowback.c/h**：两路阀；每传感器在其块内拥有相同寄存器集（间隔、时长、状态、倒计时、命令）；**BLOW_CONTROL(ch, state)**；Relay0/1 与 Relay2/3。
+- **calibration.c/h**：每传感器 NOx/O₂ 标定（各传感器块内标定触发与点选择）、斜率/截距、**Calibration_Init**。
+- **alarm.c/h**：报警阈值（P12/P13）与当前输出（P01/P02）比较。
+
+---
+
+## 4. 通信
 
 ### 4.1 J1939 / CAN
 
-- **Role:** Receive NOx sensor frames from **two sensors**; send one heater command for both.
-- **Filter:** Frames with **source address (SA) 0x52** (channel 0, outlet) or **0x51** (channel 1, inlet) are accepted. Each frame is tagged with a channel index and pushed to the receive queue.
-- **Received payload (8 bytes):**  
-  - Data[0–1]: NOx raw; Data[2–3]: O₂ raw; Data[4]: status; Data[5]: heater; Data[6–7]: fault codes.
-- **Heater command:** One CAN frame with ID `0x18FEDF55`, Byte7 Start-Code (e.g. 0x55) controls heating for both sensors (ATO1/ATI1 and ATO2/ATI2 per Continental interface doc).
+- **角色**：从**两个传感器**接收 NOx 帧；向两路发送一路加热命令。
+- **滤波**：接受**源地址（SA）0x52**（通道 0，出口）或 **0x51**（通道 1，入口）的帧。每帧带通道索引入队。
+- **接收载荷（8 字节）**：  
+  - Data[0–1]：NOx 原始值；Data[2–3]：O₂ 原始值；Data[4]：状态；Data[5]：加热；Data[6–7]：故障码。
+- **加热命令**：一帧 CAN，ID `0x18FEDF55`，Byte7 启动码（如 0x55）同时控制两路传感器加热（按 Continental 接口文档 ATO1/ATI1、ATO2/ATI2）。
 
-### 4.2 Modbus Slave (USART1, RS485)
+### 4.2 Modbus 从站（USART1，RS485）
 
-- **Default:** address `1`, baud rate **115200** (can be overridden by SD card `config.txt`).
-- **Supported:** 03H (read holding), 06H (write single), 10H (write multiple), 01H/05H (coils).
-- **Data format:** Holding registers are big-endian; floats use 2 consecutive 16-bit registers.
+- **默认**：地址 `1`，波特率 **115200**（可由 SD 卡 `config.txt` 覆盖）。
+- **支持**：03H（读保持）、06H（写单寄存器）、10H（写多寄存器）、01H/05H（线圈）。
+- **数据格式**：保持寄存器大端；浮点占 2 个连续 16 位寄存器。
 
-### 4.3 Modbus Master (UART5, RS485)
+### 4.3 Modbus 主站（UART5，RS485）
 
-- Writes the **4–20 mA** values (NOx and O₂ from strategy) to an external slave (default address `0x01`, registers `REG_P01`/`REG_P02`, 2 registers), then reads them back with 03H for verification.
-
----
-
-## 5. Modbus Register Map
-
-Register layout: **common** (output, 4–20 mA, mode, alarm only), then **sensor 1 block** (40013–40050), then **sensor 2 block** (40051–40088). The two sensor blocks have **identical structure** (same number and order of registers).
-
-### 5.1 Common Registers (40001–40012)
-
-| Addr | Name | R/W | Description |
-|------|------|-----|-------------|
-| 40001–40002 | P01 | R | **Current** NOx (ppm), float — strategy output |
-| 40003–40004 | P02 | R | **Current** O₂, float — strategy output |
-| 40005 | P07 | R | **Current** output status word (9 bits) |
-| 40006–40007 | P12 | R/W | NOx high alarm (ppm), float |
-| 40008–40009 | P13 | R/W | O₂ low alarm, float |
-| 40010 | P22 | R/W | 4–20 mA NOx code (written by host) |
-| 40011 | P23 | R/W | 4–20 mA O₂ code (written by host) |
-| 40012 | P34 | R/W | **Work mode:** write low byte 0/1/2; single also uses high byte 0 or 256 to select S1/S2. **Readback** always includes **runtime** high byte: **0/1 = S1/S2**, **2 = fusion average**, **0xFF = fault** — see **§5.5**. |
-
-### 5.2 Sensor Block (same for sensor 1 and sensor 2)
-
-**Sensor 1:** 40013–40050 (38 register addresses)  
-**Sensor 2:** 40051–40088 (38 register addresses)
-
-Within each block, order is:
-
-| Offset in block | Addr (S1) | Addr (S2) | R/W | Description |
-|-----------------|------------|------------|-----|-------------|
-| 0–1 | 40013–40014 | 40051–40052 | R | Live NOx (ppm), float |
-| 2–3 | 40015–40016 | 40053–40054 | R | Live O₂, float |
-| 4 | 40017 | 40055 | R | Status word (9 bits) |
-| 5–8 | 40018–40025 | 40056–40063 | R/W | Segment 1: NOx a/b, O₂ a/b (float) |
-| 9–12 | 40026–40033 | 40064–40071 | R/W | Segment 2: NOx a/b, O₂ a/b (float) |
-| 13–16 | 40034–40041 | 40072–40079 | R/W | Cal point 2 & 3: NOx, O₂ (float) |
-| 17 | 40042 | 40080 | R/W | NOx cal trigger (0x0001 step, 0x0002 restore) |
-| 18 | 40043 | 40081 | R/W | NOx point select (0/1/2) |
-| 19 | 40044 | 40082 | R/W | O₂ cal trigger |
-| 20 | 40045 | 40083 | R/W | O₂ point select |
-| 21 | 40046 | 40084 | R/W | Blowback interval (s); 0 or 0xFFFF = stop |
-| 22 | 40047 | 40085 | R/W | Blowback duration (s) |
-| 23 | 40048 | 40086 | R | Blowback status (0 idle, 1 blowing) |
-| 24 | 40049 | 40087 | R | Blowback countdown (s) |
-| 25 | 40050 | 40088 | R/W | Blowback command (0 no op; 1 trigger once; 2 trigger+reset; 3/0xFFFF stop) |
-
-Calibration applies **per sensor**: writing to sensor 1’s NOx/O₂ cal trigger affects sensor 1; writing to sensor 2’s affects sensor 2. There is no global “P53” calibration target.
-
-### 5.3 Coils (01H read, 05H write)
-
-| Coil | Description |
-|------|-------------|
-| D01 | Sensor 1 normal operation (Relay0). ON = normal gas path. |
-| D02 | Sensor 1 blowback control (Relay1). ON = blowback valve open. |
-| D03 | Sensor 2 normal operation (Relay2). ON = normal gas path. |
-| D04 | Sensor 2 blowback control (Relay3). ON = blowback valve open. |
-| D05 | Reserved. |
-
-Only one sensor may be in blowback at a time (enforced in firmware).
-
-### 5.4 Status register bit map (P07, S1 status, S2 status)
-
-The **same 9-bit status word** is exposed as:
-
-| Modbus address | Role |
-|----------------|------|
-| **40005** | **P07** — status of the **current** output source (after work-mode strategy). |
-| **40017** | Sensor 1 (channel 0, SA 0x52) live status. |
-| **40055** | Sensor 2 (channel 1, SA 0x51) live status. |
-
-The value is a **16-bit holding register**; only **bits 0–8** are used.  
-**511 (decimal) = 0x01FF** means **all conditions OK** for that channel/output — the firmware treats this as **valid** for primary-backup selection and as “normal” on the OLED when **P07** is 0x1FF.
-
-| Bit | When **1** (set) | When **0** (clear) |
-|-----|------------------|--------------------|
-| **0** | **O₂ FMI OK** — O₂ fault code byte indicates no fault (FMI = 0x1F). | O₂ fault reported or FMI not “no error”. |
-| **1** | **NOx FMI OK** — NOx fault code byte indicates no fault (FMI = 0x1F). | NOx fault reported or FMI not “no error”. |
-| **2** | **Heater FMI OK** — heater byte low 5 bits = 0x1F (no heater fault). | Heater fault or FMI not “no error”. |
-| **3** | **Heater active** — heater control is in auto or heating slope (not stop/preheat). | Stop heating / preheat mode (heater not in normal heating control). |
-| **4** | **Power in range** — CAN Status Byte “voltage in range” field = 01b. | Supply out of range or status field not valid. |
-| **5** | **Sensor at temperature** — CAN Status Byte “sensor at temp” field = 01b. | Not at operating temperature yet. |
-| **6** | **O₂ signal valid** — CAN Status Byte “O₂ stable” field = 01b. | O₂ reading not stable/invalid. |
-| **7** | **NOx signal valid** — CAN Status Byte “NOx stable” field = 01b. | NOx reading not stable/invalid. |
-| **8** | **Reserved / always set** in current firmware (word is built with this bit set). | — |
-
-**Summary:** Read **40005** for the **combined** output health; read **40017** / **40055** per sensor. **511 (0x1FF)** = bits 0–8 all set = normal operation for that status word. Any cleared bit in 0–7 indicates the corresponding condition is not satisfied; bit 3 clear means heating is not in the active heating states.
-
-### 5.5 Work mode — automatic switching and readback (P34 / 40012)
-
-**Stored (write) low byte** is still **0 = single**, **1 = primary-backup**, **2 = fusion**. The firmware **does not** change the stored mode when conditions change; it only changes **which path feeds P01/P02/P07/4–20 mA** and what you **read back** on **40012**.
-
-#### Priority (applies whenever output must be chosen)
-
-1. **Blowback** — If exactly one path is blowing, output **always** uses the **non-blowing** path (purge path must not drive the analog output). Same in single, primary-backup, and fusion.
-2. **Valid path (0x1FF)** — Prefer a channel that is **valid** and **not blowing** (order S1 then S2).
-3. **Fusion only when both valid and neither blowing** — **Average** NOx/O₂ only in that case. There is **no** “fusion with single path”; if fusion is selected but only one path qualifies, behaviour matches **primary-backup** (single source, readback high byte **0** or **1**, not **2**).
-4. **Both invalid / both blowing with no safe path** — Output still filled from **S1** for continuity, but readback high byte becomes **0xFF** (**fault**). **P07** will not be 0x1FF; HMI should treat as alarm.
-
-#### Readback high byte (real time)
-
-| High byte | Decimal (in 16-bit read) | Meaning |
-|-----------|---------------------------|--------|
-| **0** | 1 / 256* | **S1** is the current source (*256 only when low byte 0 and stored single S2 but degraded—readback replaces stored for display). |
-| **1** | 256 / 257 | **S2** is the current source (e.g. 257 = mode 1 + S2). |
-| **2** | 512 / 514 | **Fusion average** applied (both valid, neither blowing). |
-| **0xFF** | 65280 + mode (e.g. **65281** = 0xFF01) | **Fault** — no valid usable path; output is best-effort from S1. |
-
-OLED shows **src:S1 / S2 / FUSE / FAULT** accordingly.
+- 将**4–20 mA** 数值（策略得到的 NOx 与 O₂）写入外部从站（默认地址 `0x01`，寄存器 `REG_P01`/`REG_P02`，共 2 个寄存器），并用 03H 读回校验。
 
 ---
 
-## 6. How to Use
+## 5. Modbus 寄存器映射
 
-### 6.1 Build and Flash
+寄存器布局：**公共**（输出、4–20 mA、模式、输出传感器、报警），随后 **传感器 1 块**（40014–40052）、**传感器 2 块**（40053–40091）。两传感器块**结构相同**（39 个寄存器，块首为上电寄存器）。
 
-- Open **MDK-ARM/NOx_RCT6.uvprojx** in Keil µVision.
-- Build the project (F7).
-- Connect the ST-Link and flash (F8). Optionally use the STM32CubeProgrammer or other tools.
+### 5.1 公共寄存器（40001–40013）
 
-### 6.2 First Power-Up
+| 地址 | 名称 | R/W | 说明 |
+|------|------|-----|------|
+| 40001–40002 | P01 | R | **当前** NOx（ppm），float — 策略输出 |
+| 40003–40004 | P02 | R | **当前** O₂，float — 策略输出 |
+| 40005 | P07 | R | **当前** 输出状态字（9 位） |
+| 40006–40007 | P12 | R/W | NOx 高报警（ppm），float |
+| 40008–40009 | P13 | R/W | O₂ 低报警，float |
+| 40010 | P22 | R/W | 4–20 mA NOx 码（由主机写入） |
+| 40011 | P23 | R/W | 4–20 mA O₂ 码（由主机写入） |
+| 40012 | P34 | R/W | **工作模式**：**读**仅返回 0/1/2。**写**：mode=0 写 **0/256** 选单路 S1/S2；mode=1 写 **1/257** 选主从的 主（1=S1 主，257=S2 主）；mode=2 写 2，融合无主从。 |
+| 40013 | P35 | R | **输出传感器**（只读）：0b01=传感器0输出，0b10=传感器1输出，0b11=混合（融合），0b00=故障。 |
 
-- After flash, the device loads parameters from **internal Flash** (if previously saved). If Flash is empty, defaults from **app_config.h** and **Register_Init** are used.
-- **Factory program (manual):** Set **FACTORY_FLASH_PROGRAM_ON_BOOT** to **1** in **app_config.h**, build, flash, power once — firmware **writes current default calibration (24 floats) to Flash** after **Register_Init** and does **not** Load that boot. Then set the macro back to **0**, rebuild, and flash again for normal operation (Load on boot). If left at 1, every boot will erase/write Flash and overwrite user calibration.
-- Modbus slave uses **USART1** (RS485); ensure the HMI or PC tool uses the same baud rate (e.g. 115200) and slave address (default 1).
-- Optional: put a **config.txt** on the SD card to override baud rate (e.g. `baudrate=115200`). The exact key names depend on **handleConfig()** in the SD card module.
+### 5.2 传感器块（传感器 1 与传感器 2 相同）
 
-### 6.3 Reading NOx and O₂
+**传感器 1**：40014–40052（39 个寄存器）  
+**传感器 2**：40053–40091（39 个寄存器）
 
-- **P01** / **P02** / **P07**: **Current** output (one set) — driven by work mode (single ch0, primary-backup, or fusion). Read via Modbus 03H.
-- **Sensor blocks:** each sensor has **live NOx, O₂, status** at the start of its block (e.g. 40013–40017 for sensor 1, 40051–40055 for sensor 2). Use these to monitor each sensor separately.
-- **P07** value **0x1FF** means all conditions OK for the current output source.
+块内顺序（块首为上电寄存器，由预留 GPIO 控制；GPIO 未确定时见 app_config.h / main.h）：
 
-### 6.4 Calibration (3-Point, Two-Segment, Per Sensor)
+| 块内偏移 | 地址（S1） | 地址（S2） | R/W | 说明 |
+|----------|------------|------------|-----|------|
+| 0 | 40014 | 40053 | R/W | **上电**：0=关 1=开；与预留传感器电源 GPIO 对应（SENSOR_POWER_GPIO_ENABLE=1 时驱动 GPIO） |
+| 1–2 | 40015–40016 | 40054–40055 | R | 实时 NOx（ppm），float |
+| 3–4 | 40017–40018 | 40056–40057 | R | 实时 O₂，float |
+| 5 | 40019 | 40058 | R | 状态字（9 位） |
+| 6–9 | 40020–40027 | 40059–40066 | R/W | 段 1：NOx a/b，O₂ a/b（float） |
+| 10–13 | 40028–40035 | 40067–40074 | R/W | 段 2：NOx a/b，O₂ a/b（float） |
+| 14–17 | 40036–40043 | 40075–40082 | R/W | 标定点 2 与 3：NOx、O₂（float） |
+| 18 | 40044 | 40083 | R/W | NOx 标定触发（0x0001 执行一步，0x0002 恢复默认） |
+| 19 | 40045 | 40084 | R/W | NOx 点选择（0/1/2） |
+| 20 | 40046 | 40085 | R/W | O₂ 标定触发 |
+| 21 | 40047 | 40086 | R/W | O₂ 点选择 |
+| 22 | 40048 | 40087 | R/W | 反吹间隔（秒）；0 或 0xFFFF = 停止 |
+| 23 | 40049 | 40088 | R/W | 反吹时长（秒） |
+| 24 | 40050 | 40089 | R | 反吹状态（0 空闲，1 反吹中） |
+| 25 | 40051 | 40090 | R | 反吹倒计时（秒） |
+| 26 | 40052 | 40091 | R/W | 反吹命令（0 无操作；1 触发一次；2 触发并重置周期；3/0xFFFF 停止） |
 
-- There is **no P53**. Calibration target is determined by **which sensor’s** register you write: sensor 1 block (40013–40050) or sensor 2 block (40051–40088).
-- **NOx (sensor 1):**  
-  - Set **40043** (NOx point select) to 0, 1, or 2.  
-  - For point 1/2, set **40034–40037** / **40038–40041** (point 2/3 NOx, O₂ as float) to the reference NOx value.  
-  - Apply reference gas and wait for stability.  
-  - Write **40042 = 0x0001** to run the calibration step. Success: register is set to **0x000F**; failure: **0x0005**.  
-  - To restore defaults: write **40042 = 0x0002**; success **0x0010**.
+标定**按传感器**生效：写传感器 1 的 NOx/O₂ 标定触发只影响传感器 1；传感器 2 同理。无全局“P53”标定目标。
 
-- **NOx (sensor 2):** same logic using **40081** (point select), **40072–40079** (point Y values), **40080** (cal trigger).
+### 5.3 线圈（01H 读，05H 写）
 
-- **O₂:** use each sensor’s **O₂ point select** (40045 / 40083), **point 2/3 O₂** in the same block, and **O₂ cal trigger** (40044 / 40082) with **0x0001** (calibrate) or **0x0002** (restore).
+| 线圈 | 说明 |
+|------|------|
+| D01 | 传感器 1 正常工况（Relay0）。ON = 正常气路。 |
+| D02 | 传感器 1 反吹控制（Relay1）。ON = 反吹阀打开。 |
+| D03 | 传感器 2 正常工况（Relay2）。ON = 正常气路。 |
+| D04 | 传感器 2 反吹控制（Relay3）。ON = 反吹阀打开。 |
+| D05 | 保留。 |
 
-- Calibration results and **blowback interval/duration (40046/40047 and 40084/40085)** are written to **internal Flash** together whenever **InternalFlash_Write** runs (e.g. after a successful calibration step or **FACTORY_FLASH_PROGRAM_ON_BOOT**). Default factory values are **3600 s** interval and **60 s** duration per channel. **5-minute stagger** between ch0 and ch1 remains implemented in **blowback.c** (**BLOW_STAGGER_SEC**), not stored in Flash.
+固件保证同一时间仅一路传感器处于反吹。
 
-### 6.5 Blowback Control (Two Valves)
+### 5.4 状态寄存器位定义（P07、S1 状态、S2 状态）
 
-- **Sensor 1 (Relay0/1):** registers **40046–40050** — interval (40046), duration (40047), status R (40048), countdown R (40049), command (40050).  
-  - Command: **0** = no op; **1** = trigger once; **2** = trigger + reset cycle; **3** or **0xFFFF** = stop periodic.  
-  - Interval **0** or **0xFFFF** = stop periodic; **1–65534** = interval in seconds. Duration minimum 1 s.
+**同一 9 位状态字**出现在：
 
-- **Sensor 2 (Relay2/3):** registers **40084–40088** — same layout (interval, duration, status, countdown, command).
+| Modbus 地址 | 含义 |
+|-------------|------|
+| **40005** | **P07** — **当前**输出源（工作模式策略后）的状态。 |
+| **40017** | 传感器 1（通道 0，SA 0x52）实时状态。 |
+| **40055** | 传感器 2（通道 1，SA 0x51）实时状态。 |
 
-Example: set 40046 = 3600, 40047 = 60 for sensor 1 “blow 60 s every 3600 s”. Set 40084/40085 similarly for sensor 2. To persist blow settings after a power cycle, trigger a Flash save (e.g. run factory program once with **FACTORY_FLASH_PROGRAM_ON_BOOT = 1** after setting registers, or perform a calibration write that calls **InternalFlash_Write**). Write 40050 = 1 or 40088 = 1 for a single manual blow. Read status and countdown (40048/40049 and 40086/40087) for HMI display. **40049/40087 countdown:** when **status = 0 (idle)** = seconds until the next periodic blow; when **status = 1 (blowing)** = seconds remaining in the current blow.
+数值为 **16 位保持寄存器**；仅 **位 0–8** 有效。  
+**511（十进制）= 0x01FF** 表示该通道/输出**全部条件正常** — 固件将其视为主备选择的**有效**通道，且当 **P07** 为 0x1FF 时在 OLED 上显示“正常”。
 
-- **Stagger:** Periodic blowback for **sensor 2 (ch1)** is offset by **5 minutes (300 s)** from sensor 1’s phase so the two paths do not request blowback at the same tick. Ch0 still fires at `tick % interval == 0`; ch1 fires when `tick % interval == (300 % interval)` (see **BLOW_STAGGER_SEC** in **app_config.h**). Only one valve can blow at a time; if one is already blowing, the other start is skipped until it finishes.
+| 位 | **1** 时（置位） | **0** 时（清除） |
+|----|------------------|------------------|
+| **0** | **O₂ FMI 正常** — O₂ 故障码字节表示无故障（FMI = 0x1F）。 | 报告 O₂ 故障或 FMI 非“无错误”。 |
+| **1** | **NOx FMI 正常** — NOx 故障码字节表示无故障（FMI = 0x1F）。 | 报告 NOx 故障或 FMI 非“无错误”。 |
+| **2** | **加热 FMI 正常** — 加热字节低 5 位 = 0x1F（无加热故障）。 | 加热故障或 FMI 非“无错误”。 |
+| **3** | **加热激活** — 加热控制处于自动或加热斜率（非停止/预热）。 | 停止加热/预热（加热未在正常加热控制）。 |
+| **4** | **电源在范围** — CAN 状态字节“电压在范围”字段 = 01b。 | 供电超范围或状态字段无效。 |
+| **5** | **传感器达温** — CAN 状态字节“传感器达温”字段 = 01b。 | 尚未达到工作温度。 |
+| **6** | **O₂ 信号有效** — CAN 状态字节“O₂ 稳定”字段 = 01b。 | O₂ 读数不稳定/无效。 |
+| **7** | **NOx 信号有效** — CAN 状态字节“NOx 稳定”字段 = 01b。 | NOx 读数不稳定/无效。 |
+| **8** | **保留 / 当前固件恒置位**（构建状态字时该位被置位）。 | — |
 
-### 6.6 Work Mode (Dual-Sensor Strategy)
+**小结**：读 **40005** 得**综合**输出健康；读 **40017** / **40055** 得各传感器。**511（0x1FF）** = 位 0–8 全置 = 该状态字正常。位 0–7 任一位清除表示对应条件未满足；位 3 清除表示加热未处于激活加热状态。
 
-- **Register 40012 (P34)** = work mode (R/W), 16-bit:
-  - **Low byte (mode):**
-    - **0** = **Single:** one channel drives P01/P02/P07 and 4–20 mA. Which channel is selected by the **high byte**: **0** = channel 0 (SA 0x52), **256 (0x0100)** = channel 1 (SA 0x51). Example: write **0** for single ch0, write **256** for single ch1.
-    - **1** = **Primary-backup (default):** if **one path is in blowback**, output **always** uses the **other** path (P01/P02/4–20 mA). Otherwise use the first **valid** channel (0 then 1). If one channel is heating or fault (invalid), the other valid channel is used automatically. Both sensors’ data remain visible in their sensor blocks.
-    - **2** = **Fusion:** average NOx and O₂ over **valid channels that are not in blowback**; if only one path is not blowing, that path is used (even if not 0x1FF). When both are usable, averaging behaves as before.
+### 5.5 工作模式与输出传感器（P34 / P35）
 
-- **Default at power-up / after Register_Init:** P34 = **1** (primary-backup). Manual write to 40012 takes effect on the next strategy cycle (~50 ms).
+- **P34（40012）**：**读**仅返回工作模式 0/1/2。**写**：单路写 **0/256**；主从写 **1/257**（1=ch0 主，257=ch1 主）；融合写 2。
+- **P35（40013，只读）**：**当前输出传感器**。0b01 = 传感器 0 输出，0b10 = 传感器 1 输出，0b11 = 混合（融合），0b00 = 故障（无有效路径）。
 
-- The **single 4–20 mA** output always reflects the current strategy result (P01/P02 = NOx and O₂). Per-sensor values are in each sensor block’s live registers for display or logging.
-
-### 6.7 Alarms
-
-- **P12** = NOx high alarm (ppm); **P13** = O₂ low alarm.  
-- The firmware compares **current** NOx/O₂ (P01/P02) to these; alarm handling (e.g. relay or message) can be extended in **Alarm_Update()** in alarm.c.
-
-### 6.8 4–20 mA Output
-
-- The device converts the **current** NOx and O₂ (from the selected work mode) to 4–20 mA codes and fills **electricity_data_buf**.
-- The **Modbus host** task (UART5) writes these to the external current-output slave. No extra user action is required beyond wiring and setting the slave address in **modbus_host.c** (e.g. `REG_P01`, `REG_P02`). There is **one** 4–20 mA output (NOx + O₂); per-sensor values are in the sensor blocks for display or logging.
-
-### 6.9 Changing Defaults
-
-- **Work mode default** is set in **USER/NOx.c** in **Register_Init()**: `g_tVar.work_mode = 1` (primary-backup). Change to `0` for single ch0 or `256` for single ch1 if needed.
-- Edit **USER/app_config.h** for:
-  - **NOX_SENSOR_COUNT** (currently 2), **NOX_SENSOR_COUNT_MAX** (3 for future), **NOX_SENSOR_SA_LIST**.
-  - Default NOx/O₂ conversion (slope/intercept), calibration Y values, alarm thresholds.
-  - Blowback default duration and interval, minimum duration, **BLOW_STAGGER_SEC** (ch1 phase offset).
-  - 4–20 mA full-scale ranges and J1939 heater CAN ID/payload.
-
----
-
-## 7. File Layout (Summary)
-
-| Path | Purpose |
-|------|--------|
-| **USER/app_config.h** | Central defaults, **NOX_SENSOR_COUNT**, work mode enum, J1939 constants. |
-| **USER/nox_sensor.h, nox_sensor.c** | Calibration math, raw→ppm/%, 4–20 mA conversion. |
-| **USER/nox_channel.h, nox_channel.c** | Per-sensor channel state and params; **NoxChannel_UpdateFromCan**, **NoxChannel_GetCurrentOutput**; modular for 2/3 sensors. |
-| **USER/NOx.h, NOx.c** | J1939 handling (per channel), tasks, strategy, register/Flash init; uses blowback, calibration, alarm, nox_channel. |
-| **USER/blowback.h, blowback.c** | Two blowback valves; each sensor has the same register set in its block; **BLOW_CONTROL(ch, state)**. |
-| **USER/calibration.h, calibration.c** | NOx/O₂ calibration per sensor (each sensor's cal trigger in its block), slope/intercept. |
-| **USER/alarm.h, alarm.c** | Alarm thresholds and comparison with current output. |
-| **USER/J1939.H, J1939.c** | J1939/CAN RX queue (with channel index), TX heater command. |
-| **USER/modbus_slave.h, modbus_slave.c** | Modbus slave, register map (common + S1/S2 blocks), Flash read/write (24 floats). |
-| **USER/modbus_flash.h, modbus_flash.c** | Internal Flash save/load for S1 and S2 calibration params (24 floats). |
-| **USER/modbus_host.h, modbus_host.c** | Modbus master, 4–20 mA write/read. |
-| **USER/modbus.h, modbus.c** | CRC, RS485 direction, common UART/timer macros. |
-| **Core/** | HAL init, main, FreeRTOS, clock, interrupts. |
-| **HARDWARE/** | OLED, font, SD card (FATFS, config). |
-| **FATFS/** | FatFS and user_diskio. |
-| **MDK-ARM/** | Keil project and startup. |
+**优先级**（在必须选择输出时适用）：(1) 反吹时用未反吹一路；(2) 有效路径（0x1FF）按 S1→S2；(3) 仅当两路都有效且都未反吹时做融合；(4) 无可用路径时输出仍填 S1，P35 读为 0b00（故障）。
 
 ---
 
-## 8. Version and Toolchain
+## 6. 使用说明
 
-- **IDE:** Keil µVision (MDK-ARM).  
-- **Target:** STM32F103RCTx.  
-- **HAL:** STM32Cube FW_F1.  
-- **RTOS:** FreeRTOS with CMSIS-RTOS v2.  
-- Generated from **STM32CubeMX** (NOx_RCT6.ioc); re-generate only if you change device or peripherals, and re-apply any manual edits under USER and application code.
+### 6.1 编译与烧录
+
+- 用 Keil µVision 打开 **MDK-ARM/NOx_RCT6.uvprojx**。
+- 编译（F7）。
+- 连接 ST-Link 并烧录（F8）。也可使用 STM32CubeProgrammer 等工具。
+
+### 6.2 首次上电
+
+- 烧录后，设备从**片内 Flash** 加载参数（若曾保存）。若 Flash 为空，则使用 **app_config.h** 与 **Register_Init** 的默认值。
+- **出厂编程（手动）**：在 **app_config.h** 中将 **FACTORY_FLASH_PROGRAM_ON_BOOT** 设为 **1**，编译、烧录、上电一次 — 固件在 **Register_Init** 之后将**当前默认标定（24 个 float）写入 Flash**，且该次启动**不**执行 Load。然后将该宏改回 **0**，重新编译、烧录，进入正常使用（上电 Load）。若一直为 1，每次上电都会擦写 Flash 并覆盖用户标定。
+- Modbus 从站使用 **USART1**（RS485）；确保 HMI 或 PC 工具使用相同波特率（如 115200）和从站地址（默认 1）。
+- 可选：在 SD 卡放置 **config.txt** 覆盖波特率（如 `baudrate=115200`）。具体键名取决于 SD 卡模块中的 **handleConfig()**。
+
+### 6.3 读取 NOx 与 O₂
+
+- **P01** / **P02** / **P07**：**当前**输出（一组）— 由工作模式（单路 ch0、主备或融合）驱动。通过 Modbus 03H 读取。
+- **传感器块**：每个传感器块首寄存器为**上电**（40014/40053），随后为**实时 NOx、O₂、状态**（传感器 1：40015–40019，传感器 2：40054–40058）。用于分别监控各传感器。
+- **P07** 为 **0x1FF** 表示当前输出源全部条件正常。
+
+### 6.4 标定（3 点、两段、每传感器）
+
+- 无 P53。标定目标由**写哪个传感器**的寄存器决定：传感器 1 块（40014–40052）或传感器 2 块（40053–40091）。
+- **NOx（传感器 1）**：
+  - 将 **40045**（NOx 点选择）设为 0、1 或 2。
+  - 对点 1/2，将 **40036–40039** / **40040–40043**（点 2/3 的 NOx、O₂ float）设为参考 NOx 值。
+  - 通入标准气并等待稳定。
+  - 写 **40044 = 0x0001** 执行标定一步。成功：寄存器变为 **0x000F**；失败：**0x0005**。
+  - 恢复默认：写 **40044 = 0x0002**；成功 **0x0010**。
+
+- **NOx（传感器 2）**：逻辑相同，使用 **40084**（点选择）、**40075–40082**（点 Y 值）、**40083**（标定触发）。
+
+- **O₂**：使用各传感器的 **O₂ 点选择**（40047 / 40086）、同块内的**点 2/3 O₂** 以及 **O₂ 标定触发**（40046 / 40085），**0x0001**（标定）或 **0x0002**（恢复）。
+
+- 标定结果与**反吹间隔/时长（40048/40049 与 40087/40088）**在 **InternalFlash_Write** 执行时（如标定成功或 **FACTORY_FLASH_PROGRAM_ON_BOOT**）一并写入**片内 Flash**。出厂默认每通道间隔 **3600 s**、时长 **60 s**。通道 0 与通道 1 的**错峰 5 分钟**在 **blowback.c** 中实现（**BLOW_STAGGER_SEC**），不存 Flash。
+
+### 6.5 反吹控制（两路阀）
+
+- **传感器 1（Relay0/1）**：寄存器 **40048–40052** — 间隔（40048）、时长（40049）、状态 R（40050）、倒计时 R（40051）、命令（40052）。  
+  - 命令：**0** = 无操作；**1** = 触发一次；**2** = 触发并重置周期；**3** 或 **0xFFFF** = 停止周期。  
+  - 间隔 **0** 或 **0xFFFF** = 停止周期；**1–65534** = 间隔秒数。时长最小 1 s。
+
+- **传感器 2（Relay2/3）**：寄存器 **40087–40091** — 布局相同（间隔、时长、状态、倒计时、命令）。
+
+示例：传感器 1 设 40048=3600、40049=60 表示“每 3600 s 反吹 60 s”。传感器 2 同理设 40087/40088。若需断电保持反吹设置，需触发一次 Flash 保存（例如在设好寄存器后执行一次 **FACTORY_FLASH_PROGRAM_ON_BOOT = 1** 出厂编程，或执行会调用 **InternalFlash_Write** 的标定写入）。写 40052=1 或 40091=1 可手动反吹一次。读状态与倒计时（40050/40051、40089/40090）用于 HMI 显示。**40051/40090 倒计时**：**status=0（空闲）** 时 = 距下次周期反吹的秒数；**status=1（反吹中）** 时 = 本次反吹剩余秒数。
+
+- **错峰**：**传感器 2（ch1）** 的周期反吹相对传感器 1 **错开 5 分钟（300 s）**，避免两路同时请求反吹。Ch0 仍在 `tick % interval == 0` 触发；ch1 在 `tick % interval == (300 % interval)` 触发（见 **app_config.h** 中 **BLOW_STAGGER_SEC**）。同一时间只能一路阀反吹；若一路已在反吹，另一路启动会延后到该路结束。
+
+### 6.6 工作模式（双传感器策略）
+
+- **寄存器 40012（P34）** = 工作模式（R/W），16 位：
+  - **低字节（模式）**：
+    - **0** = **单路**：一路通道驱动 P01/P02/P07 与 4–20 mA。通道由**高字节**选择：**0** = 通道 0（SA 0x52），**256（0x0100）** = 通道 1（SA 0x51）。例如：写 **0** 为单路 ch0，写 **256** 为单路 ch1。
+    - **1** = **主从（默认）**：**写 P34 为 1 或 257** 指定 主（1=S1 主，257=S2 主）。反吹时用未反吹一路；否则优先用**主**通道，主无效再用从。
+    - **2** = **融合**：两路都有效且都未反吹时对 NOx/O₂ **取平均**；无主从，仅一路有效时用该路，故障回退固定 ch0。
+
+- **上电 / Register_Init 后默认**：P34 = **1**（主备）。写 40012 在下一策略周期（约 50 ms）生效。
+
+- **单一 4–20 mA** 输出始终反映当前策略结果（P01/P02 = NOx 与 O₂）。每传感器数值在各传感器块的实时寄存器中，供显示或记录。
+
+### 6.7 报警
+
+- **P12** = NOx 高报警（ppm）；**P13** = O₂ 低报警。  
+- 固件将**当前** NOx/O₂（P01/P02）与上述阈值比较；报警处理（如继电器或报文）可在 alarm.c 的 **Alarm_Update()** 中扩展。
+
+### 6.8 4–20 mA 输出
+
+- 设备将**当前** NOx 与 O₂（由所选工作模式得到）转换为 4–20 mA 码并填入 **electricity_data_buf**。
+- **Modbus 主机**任务（UART5）将这些值写入外部电流输出从站。除接线与在 **modbus_host.c** 中设置从站地址（如 `REG_P01`、`REG_P02`）外，无需其他操作。仅有**一组** 4–20 mA 输出（NOx + O₂）；每传感器数值在传感器块中供显示或记录。
+
+### 6.9 修改默认值
+
+- **工作模式默认**在 **USER/NOx.c** 的 **Register_Init()** 中：`g_tVar.work_mode = 1`（主从，ch0 主）。单路 ch0 写 `0`，单路 ch1 写 `256`；主从 ch0 主写 `1`，主从 ch1 主写 `257`。
+- 在 **USER/app_config.h** 中可修改：
+  - **NOX_SENSOR_COUNT**（当前 2）、**NOX_SENSOR_COUNT_MAX**（预留 3）、**NOX_SENSOR_SA_LIST**。
+  - 默认 NOx/O₂ 转换（斜率/截距）、标定 Y 值、报警阈值。
+  - 反吹默认时长与间隔、最小时长、**BLOW_STAGGER_SEC**（ch1 相位偏移）。
+  - 4–20 mA 满量程范围及 J1939 加热 CAN ID/载荷。
 
 ---
 
-## 9. Safety and Compliance
+## 7. 文件结构概览
 
-- This is a **debug/monitor** system. Use it in accordance with your site safety and emissions regulations.
-- Relay and valve wiring must match the intended blowback and calibration plumbing; verify before applying power or gas.
+| 路径 | 用途 |
+|------|------|
+| **USER/app_config.h** | 集中默认值、**NOX_SENSOR_COUNT**、工作模式枚举、J1939 常量。 |
+| **USER/nox_sensor.h, nox_sensor.c** | 标定数学、原始值→ppm/%、4–20 mA 转换。 |
+| **USER/nox_channel.h, nox_channel.c** | 每传感器通道状态与参数；**NoxChannel_UpdateFromCan**、**NoxChannel_GetCurrentOutput**；支持 2/3 路扩展。 |
+| **USER/NOx.h, NOx.c** | J1939 处理（每通道）、任务、策略、寄存器/Flash 初始化；使用 blowback、calibration、alarm、nox_channel。 |
+| **USER/blowback.h, blowback.c** | 两路反吹阀；每传感器块内相同寄存器集；**BLOW_CONTROL(ch, state)**。 |
+| **USER/calibration.h, calibration.c** | 每传感器 NOx/O₂ 标定（各块内标定触发）、斜率/截距。 |
+| **USER/alarm.h, alarm.c** | 报警阈值与当前输出比较。 |
+| **USER/J1939.H, J1939.c** | J1939/CAN 接收队列（带通道索引）、发送加热命令。 |
+| **USER/modbus_slave.h, modbus_slave.c** | Modbus 从站、寄存器映射（公共 + S1/S2 块）、Flash 读写（24 个 float）。 |
+| **USER/modbus_flash.h, modbus_flash.c** | 片内 Flash 保存/加载 S1、S2 标定参数（24 个 float）。 |
+| **USER/modbus_host.h, modbus_host.c** | Modbus 主站、4–20 mA 写入/读回。 |
+| **USER/modbus.h, modbus.c** | CRC、RS485 方向、通用 UART/定时器宏。 |
+| **Core/** | HAL 初始化、main、FreeRTOS、时钟、中断。 |
+| **HARDWARE/** | OLED、字体、SD 卡（FATFS、config）。 |
+| **FATFS/** | FatFS 与 user_diskio。 |
+| **MDK-ARM/** | Keil 工程与启动代码。 |
 
 ---
 
-*NOxDebug – NOx sensor monitor and debug system. Supports single or dual sensors (SA 0x52 / 0x51) with configurable work mode (single with channel select, primary-backup, fusion) and per-sensor calibration. Default mode is primary-backup. Common Modbus registers: NOx/O₂ output, output status, 4–20 mA, mode, alarm; sensor registers are symmetric (same count and layout for both). For register details and source-level behaviour, see the code and comments in USER/ and app_config.h.*
+## 8. 版本与工具链
+
+- **IDE**：Keil µVision（MDK-ARM）。  
+- **目标**：STM32F103RCTx。  
+- **HAL**：STM32Cube FW_F1。  
+- **RTOS**：FreeRTOS + CMSIS-RTOS v2。  
+- 由 **STM32CubeMX**（NOx_RCT6.ioc）生成；仅当更改器件或外设时重新生成，并需重新应用 USER 及应用层的手动修改。
+
+---
+
+## 9. 安全与合规
+
+- 本系统为**调试/监控**用途。请按现场安全与排放规范使用。
+- 继电器与阀接线须与反吹及标定气路一致；上电或通气前请确认。
+
+---
+
+*NOxDebug – NOx 传感器监控与调试系统。支持单路或双路传感器（SA 0x52 / 0x51），可配置工作模式（单路可选通道、主备、融合）及每传感器标定。默认模式为主备。公共 Modbus 寄存器：NOx/O₂ 输出、输出状态、4–20 mA、模式、报警；传感器寄存器对称（两路数量与布局相同）。寄存器细节与源码行为见 USER/ 与 app_config.h 中的代码与注释。*

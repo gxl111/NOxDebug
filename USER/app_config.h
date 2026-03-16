@@ -70,4 +70,11 @@ typedef enum {
     NOX_MODE_FUSION           /* Average of all valid channels */
 } NoxWorkMode_t;
 
+/*
+ * Sensor power control: 0 = do not drive GPIO (power_on register still R/W in Modbus).
+ * 1 = drive reserved GPIO from each sensor's power_on register (see main.h SENSOR_POWERx).
+ * GPIO pins reserved in main.h; change when hardware is defined.
+ */
+#define SENSOR_POWER_GPIO_ENABLE   0
+
 #endif /* __APP_CONFIG_H */

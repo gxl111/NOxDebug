@@ -5,6 +5,7 @@
 
 #include "modbus_slave.h"
 #include "nox_channel.h"
+#include "app_config.h"
 #include "main.h"
 #include <string.h>
 #include "usart.h"
@@ -733,20 +734,14 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
             case SLAVE_REG_ALARM_O2_LO:     f_value = g_tVar.alarm_o2_lo; f_flag = 1; break;
             case SLAVE_REG_MA_NOX:          value = g_tVar.ma_nox; break;
             case SLAVE_REG_MA_O2:           value = g_tVar.ma_o2; break;
-            case SLAVE_REG_WORK_MODE: {
-                /* Stored: low byte = mode. Readback high byte = runtime source:
-                 *   0,1 = S1/S2; 2 = fusion average; 0xFF = fault (no valid path).
-                 * Single mode: same auto rules; if degraded/fault, high byte still set. */
-                uint16_t stored = g_tVar.work_mode;
-                uint8_t mode = (uint8_t)(stored & 0xFFu);
-                if (mode == 0u)
-                    value = ((uint16_t)NoxChannel_GetWorkModeReadbackHighByte() << 8) | (uint16_t)mode;
-                else if (mode <= (uint8_t)NOX_MODE_FUSION)
-                    value = ((uint16_t)NoxChannel_GetWorkModeReadbackHighByte() << 8) | (uint16_t)mode;
-                else
-                    value = stored;
+            case SLAVE_REG_WORK_MODE:
+                /* Read: work mode only (0/1/2). Single-channel index and runtime source are in P35. */
+                value = (uint16_t)(g_tVar.work_mode & 0xFFu);
                 break;
-            }
+            case SLAVE_REG_OUTPUT_SENSOR:
+                /* P35 R-only: 0b01=S0 0b10=S1 0b11=fusion 0b00=fault */
+                value = (uint16_t)NoxChannel_GetOutputSensorReg();
+                break;
             default: UNLOCK_VAR(); return 0;
         }
         UNLOCK_VAR();
@@ -765,54 +760,58 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
 
 sensor_read:
     switch (addr) {
-        case 40013: case 40014: f_value = s->live_nox; f_flag = 1; break;
-        case 40015: case 40016: f_value = s->live_o2;  f_flag = 1; break;
-        case 40017: value = s->status; break;
-        case 40018: case 40019: f_value = s->seg1_nox_a; f_flag = 1; break;
-        case 40020: case 40021: f_value = s->seg1_nox_b; f_flag = 1; break;
-        case 40022: case 40023: f_value = s->seg1_o2_a;  f_flag = 1; break;
-        case 40024: case 40025: f_value = s->seg1_o2_b;  f_flag = 1; break;
-        case 40026: case 40027: f_value = s->seg2_nox_a; f_flag = 1; break;
-        case 40028: case 40029: f_value = s->seg2_nox_b; f_flag = 1; break;
-        case 40030: case 40031: f_value = s->seg2_o2_a;  f_flag = 1; break;
-        case 40032: case 40033: f_value = s->seg2_o2_b;  f_flag = 1; break;
-        case 40034: case 40035: f_value = s->p2_nox; f_flag = 1; break;
-        case 40036: case 40037: f_value = s->p2_o2;  f_flag = 1; break;
-        case 40038: case 40039: f_value = s->p3_nox; f_flag = 1; break;
-        case 40040: case 40041: f_value = s->p3_o2;  f_flag = 1; break;
-        case 40042: value = s->nox_cal_trig; break;
-        case 40043: value = s->nox_pt_sel; break;
-        case 40044: value = s->o2_cal_trig; break;
-        case 40045: value = s->o2_pt_sel; break;
-        case 40046: value = s->blow_interval; break;
-        case 40047: value = s->blow_duration; break;
-        case 40048: value = s->blow_status; break;
-        case 40049: value = s->blow_countdown; break;
-        case 40050: value = s->blow_cmd; break;
-        case 40056: case 40057: f_value = s->seg1_nox_a; f_flag = 1; break;
-        case 40058: case 40059: f_value = s->seg1_nox_b; f_flag = 1; break;
-        case 40060: case 40061: f_value = s->seg1_o2_a;  f_flag = 1; break;
-        case 40062: case 40063: f_value = s->seg1_o2_b;  f_flag = 1; break;
-        case 40064: case 40065: f_value = s->seg2_nox_a; f_flag = 1; break;
-        case 40066: case 40067: f_value = s->seg2_nox_b; f_flag = 1; break;
-        case 40068: case 40069: f_value = s->seg2_o2_a;  f_flag = 1; break;
-        case 40070: case 40071: f_value = s->seg2_o2_b;  f_flag = 1; break;
-        case 40072: case 40073: f_value = s->p2_nox; f_flag = 1; break;
-        case 40074: case 40075: f_value = s->p2_o2;  f_flag = 1; break;
-        case 40076: case 40077: f_value = s->p3_nox; f_flag = 1; break;
-        case 40078: case 40079: f_value = s->p3_o2;  f_flag = 1; break;
-        case 40080: value = s->nox_cal_trig; break;
-        case 40081: value = s->nox_pt_sel; break;
-        case 40082: value = s->o2_cal_trig; break;
-        case 40083: value = s->o2_pt_sel; break;
-        case 40084: value = s->blow_interval; break;
-        case 40085: value = s->blow_duration; break;
-        case 40086: value = s->blow_status; break;
-        case 40087: value = s->blow_countdown; break;
-        case 40088: value = s->blow_cmd; break;
-        case 40051: case 40052: f_value = s->live_nox; f_flag = 1; break;
-        case 40053: case 40054: f_value = s->live_o2;  f_flag = 1; break;
-        case 40055: value = s->status; break;
+        /* S1 block 40014-40052 */
+        case 40014: value = s->power_on; break;
+        case 40015: case 40016: f_value = s->live_nox; f_flag = 1; break;
+        case 40017: case 40018: f_value = s->live_o2;  f_flag = 1; break;
+        case 40019: value = s->status; break;
+        case 40020: case 40021: f_value = s->seg1_nox_a; f_flag = 1; break;
+        case 40022: case 40023: f_value = s->seg1_nox_b; f_flag = 1; break;
+        case 40024: case 40025: f_value = s->seg1_o2_a;  f_flag = 1; break;
+        case 40026: case 40027: f_value = s->seg1_o2_b;  f_flag = 1; break;
+        case 40028: case 40029: f_value = s->seg2_nox_a; f_flag = 1; break;
+        case 40030: case 40031: f_value = s->seg2_nox_b; f_flag = 1; break;
+        case 40032: case 40033: f_value = s->seg2_o2_a;  f_flag = 1; break;
+        case 40034: case 40035: f_value = s->seg2_o2_b;  f_flag = 1; break;
+        case 40036: case 40037: f_value = s->p2_nox; f_flag = 1; break;
+        case 40038: case 40039: f_value = s->p2_o2;  f_flag = 1; break;
+        case 40040: case 40041: f_value = s->p3_nox; f_flag = 1; break;
+        case 40042: case 40043: f_value = s->p3_o2;  f_flag = 1; break;
+        case 40044: value = s->nox_cal_trig; break;
+        case 40045: value = s->nox_pt_sel; break;
+        case 40046: value = s->o2_cal_trig; break;
+        case 40047: value = s->o2_pt_sel; break;
+        case 40048: value = s->blow_interval; break;
+        case 40049: value = s->blow_duration; break;
+        case 40050: value = s->blow_status; break;
+        case 40051: value = s->blow_countdown; break;
+        case 40052: value = s->blow_cmd; break;
+        /* S2 block 40053-40091 */
+        case 40053: value = s->power_on; break;
+        case 40054: case 40055: f_value = s->live_nox; f_flag = 1; break;
+        case 40056: case 40057: f_value = s->live_o2;  f_flag = 1; break;
+        case 40058: value = s->status; break;
+        case 40059: case 40060: f_value = s->seg1_nox_a; f_flag = 1; break;
+        case 40061: case 40062: f_value = s->seg1_nox_b; f_flag = 1; break;
+        case 40063: case 40064: f_value = s->seg1_o2_a;  f_flag = 1; break;
+        case 40065: case 40066: f_value = s->seg1_o2_b;  f_flag = 1; break;
+        case 40067: case 40068: f_value = s->seg2_nox_a; f_flag = 1; break;
+        case 40069: case 40070: f_value = s->seg2_nox_b; f_flag = 1; break;
+        case 40071: case 40072: f_value = s->seg2_o2_a;  f_flag = 1; break;
+        case 40073: case 40074: f_value = s->seg2_o2_b;  f_flag = 1; break;
+        case 40075: case 40076: f_value = s->p2_nox; f_flag = 1; break;
+        case 40077: case 40078: f_value = s->p2_o2;  f_flag = 1; break;
+        case 40079: case 40080: f_value = s->p3_nox; f_flag = 1; break;
+        case 40081: case 40082: f_value = s->p3_o2;  f_flag = 1; break;
+        case 40083: value = s->nox_cal_trig; break;
+        case 40084: value = s->nox_pt_sel; break;
+        case 40085: value = s->o2_cal_trig; break;
+        case 40086: value = s->o2_pt_sel; break;
+        case 40087: value = s->blow_interval; break;
+        case 40088: value = s->blow_duration; break;
+        case 40089: value = s->blow_status; break;
+        case 40090: value = s->blow_countdown; break;
+        case 40091: value = s->blow_cmd; break;
         default: UNLOCK_VAR(); return 0;
     }
     UNLOCK_VAR();
@@ -854,11 +853,10 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
             case SLAVE_REG_MA_NOX:          g_tVar.ma_nox = value; break;
             case SLAVE_REG_MA_O2:           g_tVar.ma_o2 = value; break;
             case SLAVE_REG_WORK_MODE: {
-                /* Single (mode 0): store full word (high byte = channel). Mode 1/2: store low byte only
-                 * so Flash/active channel readback does not persist stale high byte. */
+                /* Mode 0: 0=ch0, 256=ch1. Mode 1: 1=ch0 主, 257=ch1 主. Mode 2: 2 only. */
                 uint8_t mode = (uint8_t)(value & 0xFFu);
-                if (mode == 0u)
-                    g_tVar.work_mode = value;
+                if (mode == 0u || mode == 1u)
+                    g_tVar.work_mode = (value & 0xFFu) | (value & 0x0100u);
                 else
                     g_tVar.work_mode = mode;
                 break;
@@ -878,48 +876,62 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
 
     LOCK_VAR();
     switch (addr) {
-        case 40013: case 40014: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40015: case 40016: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40018: case 40019: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40020: case 40021: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40022: case 40023: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40024: case 40025: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40026: case 40027: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40028: case 40029: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40030: case 40031: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40032: case 40033: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40034: case 40035: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40036: case 40037: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40038: case 40039: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40040: case 40041: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40042: s->nox_cal_trig = value; UNLOCK_VAR(); return 1;
-        case 40043: s->nox_pt_sel = value; UNLOCK_VAR(); return 1;
-        case 40044: s->o2_cal_trig = value; UNLOCK_VAR(); return 1;
-        case 40045: s->o2_pt_sel = value; UNLOCK_VAR(); return 1;
-        case 40046: s->blow_interval = value; UNLOCK_VAR(); return 1;
-        case 40047: s->blow_duration = value; UNLOCK_VAR(); return 1;
-        case 40050: s->blow_cmd = value; UNLOCK_VAR(); return 1;
-        case 40051: case 40052: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40053: case 40054: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40056: case 40057: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40058: case 40059: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40060: case 40061: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40062: case 40063: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40064: case 40065: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40066: case 40067: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40068: case 40069: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40070: case 40071: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40072: case 40073: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40074: case 40075: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40076: case 40077: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40078: case 40079: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40080: s->nox_cal_trig = value; UNLOCK_VAR(); return 1;
-        case 40081: s->nox_pt_sel = value; UNLOCK_VAR(); return 1;
-        case 40082: s->o2_cal_trig = value; UNLOCK_VAR(); return 1;
-        case 40083: s->o2_pt_sel = value; UNLOCK_VAR(); return 1;
-        case 40084: s->blow_interval = value; UNLOCK_VAR(); return 1;
-        case 40085: s->blow_duration = value; UNLOCK_VAR(); return 1;
-        case 40088: s->blow_cmd = value; UNLOCK_VAR(); return 1;
+        /* S1 block 40014-40052 */
+        case 40014:
+            s->power_on = (value != 0u) ? 1u : 0u;
+#if SENSOR_POWER_GPIO_ENABLE
+            HAL_GPIO_WritePin(SENSOR_POWER0_GPIO_Port, SENSOR_POWER0_Pin, (s->power_on != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+#endif
+            UNLOCK_VAR(); return 1;
+        case 40015: case 40016: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40017: case 40018: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40020: case 40021: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40022: case 40023: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40024: case 40025: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40026: case 40027: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40028: case 40029: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40030: case 40031: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40032: case 40033: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40034: case 40035: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40036: case 40037: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40038: case 40039: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40040: case 40041: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40042: case 40043: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40044: s->nox_cal_trig = value; UNLOCK_VAR(); return 1;
+        case 40045: s->nox_pt_sel = value; UNLOCK_VAR(); return 1;
+        case 40046: s->o2_cal_trig = value; UNLOCK_VAR(); return 1;
+        case 40047: s->o2_pt_sel = value; UNLOCK_VAR(); return 1;
+        case 40048: s->blow_interval = value; UNLOCK_VAR(); return 1;
+        case 40049: s->blow_duration = value; UNLOCK_VAR(); return 1;
+        case 40052: s->blow_cmd = value; UNLOCK_VAR(); return 1;
+        /* S2 block 40053-40091 */
+        case 40053:
+            s->power_on = (value != 0u) ? 1u : 0u;
+#if SENSOR_POWER_GPIO_ENABLE
+            HAL_GPIO_WritePin(SENSOR_POWER1_GPIO_Port, SENSOR_POWER1_Pin, (s->power_on != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+#endif
+            UNLOCK_VAR(); return 1;
+        case 40054: case 40055: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40056: case 40057: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40059: case 40060: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40061: case 40062: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40063: case 40064: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40065: case 40066: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40067: case 40068: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40069: case 40070: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40071: case 40072: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40073: case 40074: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40075: case 40076: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40077: case 40078: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40079: case 40080: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40081: case 40082: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40083: s->nox_cal_trig = value; UNLOCK_VAR(); return 1;
+        case 40084: s->nox_pt_sel = value; UNLOCK_VAR(); return 1;
+        case 40085: s->o2_cal_trig = value; UNLOCK_VAR(); return 1;
+        case 40086: s->o2_pt_sel = value; UNLOCK_VAR(); return 1;
+        case 40087: s->blow_interval = value; UNLOCK_VAR(); return 1;
+        case 40088: s->blow_duration = value; UNLOCK_VAR(); return 1;
+        case 40091: s->blow_cmd = value; UNLOCK_VAR(); return 1;
         default: UNLOCK_VAR(); return 0;
     }
 }
@@ -961,10 +973,22 @@ uint16_t Var_Read_MaO2(void) { uint16_t r; VAR_READ_U16(ma_o2, r); return r; }
 void Var_Write_WorkMode(uint16_t value) { VAR_WRITE_U16(work_mode, value); }
 uint16_t Var_Read_WorkMode(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint16_t)(r & 0x03u); }
 uint8_t Var_Read_SingleChannelIndex(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint8_t)((r >> 8) & 1u); }
+uint8_t Var_Read_OutputSensorReg(void) { return NoxChannel_GetOutputSensorReg(); }
 
 // ========================== Sensor accessors by channel (ch=0 or 1) ==========================
 #define S(ch) ((ch) == 0 ? &g_tVar.S1 : &g_tVar.S2)
 
+uint16_t Var_Read_SensorPowerOn(uint8_t ch) { uint16_t r; LOCK_VAR(); r = S(ch)->power_on; UNLOCK_VAR(); return r; }
+void Var_Write_SensorPowerOn(uint8_t ch, uint16_t v) {
+    LOCK_VAR();
+    if (ch == 0u) { g_tVar.S1.power_on = (v != 0u) ? 1u : 0u; }
+    else { g_tVar.S2.power_on = (v != 0u) ? 1u : 0u; }
+    UNLOCK_VAR();
+#if SENSOR_POWER_GPIO_ENABLE
+    if (ch == 0u) HAL_GPIO_WritePin(SENSOR_POWER0_GPIO_Port, SENSOR_POWER0_Pin, (v != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    else          HAL_GPIO_WritePin(SENSOR_POWER1_GPIO_Port, SENSOR_POWER1_Pin, (v != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+#endif
+}
 float Var_Read_SensorLiveNox(uint8_t ch) { float r; LOCK_VAR(); r = S(ch)->live_nox; UNLOCK_VAR(); return r; }
 float Var_Read_SensorLiveO2(uint8_t ch)  { float r; LOCK_VAR(); r = S(ch)->live_o2;  UNLOCK_VAR(); return r; }
 uint16_t Var_Read_SensorStatus(uint8_t ch) { uint16_t r; LOCK_VAR(); r = S(ch)->status; UNLOCK_VAR(); return r; }
