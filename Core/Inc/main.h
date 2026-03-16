@@ -95,6 +95,11 @@ void Error_Handler(void);
 #define Relay0_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
+/* MCP2515 SPI-CAN: CS=PC10, INT=PC11 (SPI2: PB13 SCK, PB14 MISO, PB15 MOSI) */
+#define MCP2515_CS_Pin         GPIO_PIN_10
+#define MCP2515_CS_GPIO_Port  GPIOC
+#define MCP2515_INT_Pin       GPIO_PIN_11
+#define MCP2515_INT_GPIO_Port GPIOC
 /* Reserved: sensor power control GPIO (used when SENSOR_POWER_GPIO_ENABLE=1 in app_config.h). Not yet assigned. */
 #define SENSOR_POWER0_Pin       GPIO_PIN_0
 #define SENSOR_POWER0_GPIO_Port GPIOA

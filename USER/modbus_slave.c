@@ -739,7 +739,7 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
                 value = (uint16_t)(g_tVar.work_mode & 0xFFu);
                 break;
             case SLAVE_REG_OUTPUT_SENSOR:
-                /* P35 R-only: 0b01=S0 0b10=S1 0b11=fusion 0b00=fault */
+                /* P35 R-only: 0b01=S0 0b10=S1 0b11=fusion 0b100=S2(CAN2) 0b00=fault */
                 value = (uint16_t)NoxChannel_GetOutputSensorReg();
                 break;
             default: UNLOCK_VAR(); return 0;
@@ -853,10 +853,10 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
             case SLAVE_REG_MA_NOX:          g_tVar.ma_nox = value; break;
             case SLAVE_REG_MA_O2:           g_tVar.ma_o2 = value; break;
             case SLAVE_REG_WORK_MODE: {
-                /* Mode 0: 0=ch0, 256=ch1. Mode 1: 1=ch0 主, 257=ch1 主. Mode 2: 2 only. */
+                /* Mode 0: 0/256/512=ch0/ch1/ch2. Mode 1: 1/257/513=ch0/ch1/ch2 主. Mode 2: 2 only. */
                 uint8_t mode = (uint8_t)(value & 0xFFu);
                 if (mode == 0u || mode == 1u)
-                    g_tVar.work_mode = (value & 0xFFu) | (value & 0x0100u);
+                    g_tVar.work_mode = (value & 0xFFu) | (value & 0x0300u);
                 else
                     g_tVar.work_mode = mode;
                 break;
@@ -972,7 +972,7 @@ void Var_Write_MaO2(uint16_t value) { VAR_WRITE_U16(ma_o2, value); }
 uint16_t Var_Read_MaO2(void) { uint16_t r; VAR_READ_U16(ma_o2, r); return r; }
 void Var_Write_WorkMode(uint16_t value) { VAR_WRITE_U16(work_mode, value); }
 uint16_t Var_Read_WorkMode(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint16_t)(r & 0x03u); }
-uint8_t Var_Read_SingleChannelIndex(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint8_t)((r >> 8) & 1u); }
+uint8_t Var_Read_SingleChannelIndex(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint8_t)((r >> 8) & 3u); }
 uint8_t Var_Read_OutputSensorReg(void) { return NoxChannel_GetOutputSensorReg(); }
 
 // ========================== Sensor accessors by channel (ch=0 or 1) ==========================

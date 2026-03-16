@@ -27,9 +27,36 @@
 | **UART5** | 9600 波特，RS485，**Modbus 主站**（4–20 mA 模块） |
 | **I2C1** | OLED（PB6 SCL，PB7 SDA） |
 | **SPI1** | SD 卡（FATFS）；如 `config.txt` 配置波特率 |
+| **SPI2 + MCP2515** | SPI 转 CAN：PB13 SCK、PB14 MISO、PB15 MOSI，PC10 CS、PC11 INT；可在此 CAN 上外接传感器 |
 | **GPIO** | Relay0/1：反吹阀 **通道 0**（传感器 0）；Relay2/3：反吹阀 **通道 1**（传感器 1） |
 
 引脚与标签在 CubeMX 工程（`NOx_RCT6.ioc`）及 `main.h` 中定义。
+
+### 2.1 SPI 转 CAN（MCP2515）— 第二路 CAN 与 SA 0x52 传感器
+
+主控通过 **SPI2** 连接 MCP2515，实现**第二路 CAN**，用于接**地址为 52（0x52）** 的 NOx 传感器（参考 *NOx传感器电气接口 Electrical Interface Gen 2.8*）：
+
+- **SPI2**：PB13 SCK、PB14 MISO、PB15 MOSI（与原理图 MCP2515 一致）
+- **片选**：PC10（MCP2515_CS）；**中断**：PC11（MCP2515_INT）
+- **第二路 CAN 传感器**：J1939 扩展 ID **0x18F00F52**（PGN F00F，SA 0x52，出口端），250 kbps，8 字节载荷（表 4.1.1）；加热命令接收 **0x18FEDF55**（表 4.2），已由本机在第二路 CAN 上周期发送。
+
+当前工程已启用**三通道**（`NOX_SENSOR_COUNT=3`）：ch0 = CAN1 SA 0x52，ch1 = CAN1 SA 0x51，**ch2 = CAN2（MCP2515）SA 0x52**。第二路 CAN 在 `ModBusSlave` 中初始化并设滤波仅接收 0x18F00F52；`NOxReceive` 中轮询 MCP2515 接收并压入同一 J1939 队列，通道索引 2；加热帧同时发到第一路与第二路 CAN。策略（单路/主备/融合）与 P01/P02/P07、4–20 mA 均支持三通道；P34 单路可选 ch0/ch1/ch2（高字节 0/256/512），P35 可回读 0b100 表示当前输出为 S3（第二路 CAN）。
+
+#### 两个 SA 0x52 如何避免冲突
+
+系统中存在**两个**使用源地址 **0x52** 的传感器（ch0 与 ch2），二者**不会冲突**，原因如下：
+
+- **物理上为两条独立 CAN 总线**  
+  - **第一路 CAN**：片载 CAN（PA11/PA12），连接 ch0（SA 0x52）与 ch1（SA 0x51）。  
+  - **第二路 CAN**：MCP2515 的 CAN 收发器，连接 ch2（SA 0x52）。  
+  两条总线在硬件上完全隔离，不存在同一总线上两个 0x52 同时发帧的仲裁或冲突问题。
+
+- **软件按“接收来自哪路 CAN”区分通道**  
+  - 来自**片载 CAN** 的帧：在 `HAL_CAN_RxFifo0MsgPendingCallback` 中根据 SA 得到通道 0 或 1，入队时带 `channel_index = 0/1`。  
+  - 来自**MCP2515** 的帧：在 `NOxReceive` 中轮询 `MCP2515_Receive()`，收到 0x18F00F52 后入队时固定带 `channel_index = 2`。  
+  因此**通道号由“哪一路 CAN 收到”决定**，而不是仅由报文里的 SA 决定；两个 0x52 分别对应 ch0 与 ch2，不会混淆。
+
+- **总结**：同一 SA（0x52）可以在两条不同 CAN 总线上各出现一次；本机通过“第一路 CAN / 第二路 CAN”区分 ch0 与 ch2，无需也不会修改传感器地址。
 
 ---
 

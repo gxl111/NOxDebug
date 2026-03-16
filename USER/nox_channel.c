@@ -29,19 +29,22 @@ uint8_t NoxChannel_GetWorkModeReadbackHighByte(void)
     return s_readback_high_byte;
 }
 
-/* P35 output sensor: 0b01=S0, 0b10=S1, 0b11=fusion, 0b00=fault */
-#define OUT_REG_S0    0x01u
-#define OUT_REG_S1    0x02u
-#define OUT_REG_FUSION 0x03u
-#define OUT_REG_FAULT 0x00u
+/* P35 output sensor: 0b01=S0, 0b10=S1, 0b11=fusion, 0b100=S2(第二路CAN), 0b00=fault */
+#define OUT_REG_S0      0x01u
+#define OUT_REG_S1      0x02u
+#define OUT_REG_FUSION  0x03u
+#define OUT_REG_S2      0x04u
+#define OUT_REG_FAULT   0x00u
 
 uint8_t NoxChannel_GetOutputSensorReg(void)
 {
     if (s_readback_high_byte == NOX_READBACK_FAULT)
         return OUT_REG_FAULT;
-    if (s_readback_high_byte == 2u)
+    if (s_readback_high_byte == 3u)
         return OUT_REG_FUSION;
-    if (s_active_output_channel == 1u)
+    if (s_readback_high_byte == 2u)
+        return OUT_REG_S2;
+    if (s_readback_high_byte == 1u)
         return OUT_REG_S1;
     return OUT_REG_S0;
 }
@@ -58,19 +61,28 @@ static void copy_channel_out(uint8_t ch, float *nox_ppm, float *o2_pct, uint16_t
     if (state) *state = c->state;
 }
 
-/* Output averaged fusion; readback high = 2 */
+/* Output averaged fusion (all valid channels); readback high = 2 */
 static void copy_fusion_out(float *nox_ppm, float *o2_pct, uint16_t *state)
 {
     float n = 0.0f, o = 0.0f;
-    NoxChannel_t *c0 = &g_noxChannels[0];
-    NoxChannel_t *c1 = &g_noxChannels[1];
-    n = (c0->nox_ppm + c1->nox_ppm) * 0.5f;
-    o = (c0->o2_pct + c1->o2_pct) * 0.5f;
+    uint8_t n_valid = 0u;
+    for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
+        if (Blowback_IsChannelBlowing(ch)) continue;
+        if (!NoxChannel_IsValid(ch)) continue;
+        NoxChannel_t *c = &g_noxChannels[ch];
+        n += c->nox_ppm;
+        o += c->o2_pct;
+        n_valid++;
+    }
+    if (n_valid > 0u) {
+        n /= (float)n_valid;
+        o /= (float)n_valid;
+    }
     s_active_output_channel = 2u;
-    s_readback_high_byte = 2u;
+    s_readback_high_byte = 3u;  /* 3 = 融合（与 ch2 的 2 区分） */
     if (nox_ppm) *nox_ppm = n;
     if (o2_pct) *o2_pct = o;
-    if (state) *state = c0->state; /* representative; P07 may not be 0x1FF when fused */
+    if (state) *state = (n_valid > 0u) ? g_noxChannels[0].state : 0u;
 }
 
 /* Both channels invalid: fill from fallback_ch for continuity; readback marks fault */
@@ -82,38 +94,32 @@ static void copy_fault_fallback(float *nox_ppm, float *o2_pct, uint16_t *state, 
 
 /*
  * Primary-backup resolution (also used when fusion cannot average).
- * first_channel: 0 = prefer ch0 then ch1; 1 = prefer ch1 then ch0 (fusion 主).
- * 1) One side blowing -> other side only
- * 2) First valid in order [first_channel, other]
+ * first_channel: preferred channel index (0, 1, or 2).
+ * 1) Exactly one channel blowing -> use first valid of the others
+ * 2) Try first_channel, then others in order
  * 3) No valid -> fault fallback (primary channel data)
  */
 static void resolve_primary_backup_ex(float *nox_ppm, float *o2_pct, uint16_t *state, uint8_t first_channel)
 {
-    if (NOX_SENSOR_COUNT >= 2u) {
-        if (Blowback_IsChannelBlowing(0u) && !Blowback_IsChannelBlowing(1u)) {
-            copy_channel_out(1u, nox_ppm, o2_pct, state);
-            return;
-        }
-        if (Blowback_IsChannelBlowing(1u) && !Blowback_IsChannelBlowing(0u)) {
-            copy_channel_out(0u, nox_ppm, o2_pct, state);
-            return;
+    uint8_t n_blowing = 0u;
+    for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++)
+        if (Blowback_IsChannelBlowing(ch)) n_blowing++;
+    if (n_blowing == 1u) {
+        for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
+            if (Blowback_IsChannelBlowing(ch)) continue;
+            if (NoxChannel_IsValid(ch)) {
+                copy_channel_out(ch, nox_ppm, o2_pct, state);
+                return;
+            }
         }
     }
-    {   /* try first_channel then the other */
-        uint8_t ch = first_channel;
-        if (!Blowback_IsChannelBlowing(ch) && NoxChannel_IsValid(ch)) {
-            copy_channel_out(ch, nox_ppm, o2_pct, state);
-            return;
-        }
-        ch = 1u - first_channel;
-        if (ch < NOX_SENSOR_COUNT && !Blowback_IsChannelBlowing(ch) && NoxChannel_IsValid(ch)) {
-            copy_channel_out(ch, nox_ppm, o2_pct, state);
-            return;
-        }
+    if (!Blowback_IsChannelBlowing(first_channel) && NoxChannel_IsValid(first_channel)) {
+        copy_channel_out(first_channel, nox_ppm, o2_pct, state);
+        return;
     }
     for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
-        if (Blowback_IsChannelBlowing(ch))
-            continue;
+        if (ch == first_channel) continue;
+        if (Blowback_IsChannelBlowing(ch)) continue;
         if (NoxChannel_IsValid(ch)) {
             copy_channel_out(ch, nox_ppm, o2_pct, state);
             return;
@@ -122,8 +128,8 @@ static void resolve_primary_backup_ex(float *nox_ppm, float *o2_pct, uint16_t *s
     copy_fault_fallback(nox_ppm, o2_pct, state, first_channel);
 }
 
-/* Source addresses: [0]=outlet 0x52, [1]=inlet 0x51 (see Electrical Interface doc). */
-static const uint8_t s_sa_list[] = { 0x52u, 0x51u };
+/* Source addresses per channel (see Electrical Interface Gen 2.8): from NOX_SENSOR_SA_LIST */
+static const uint8_t s_sa_list[] = NOX_SENSOR_SA_LIST;
 
 static NoxWorkMode_t s_work_mode = NOX_MODE_PRIMARY_BACKUP;
 static uint8_t s_single_channel_index = 0u; /* mode 0: single ch; mode 1: 主 ch */
@@ -228,33 +234,34 @@ void NoxChannel_SetWorkMode(NoxWorkMode_t mode)
 
 void NoxChannel_SetSingleChannelIndex(uint8_t ch_index)
 {
-    s_single_channel_index = (ch_index != 0u) ? 1u : 0u;
+    s_single_channel_index = (ch_index < NOX_SENSOR_COUNT) ? ch_index : 0u;
 }
 
 void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state)
 {
     if (s_work_mode == NOX_MODE_SINGLE) {
-        /* Blowback on selected path -> use other if not blowing */
         uint8_t ch = (s_single_channel_index < NOX_SENSOR_COUNT) ? s_single_channel_index : 0u;
-        if (NOX_SENSOR_COUNT >= 2u && Blowback_IsChannelBlowing(ch)) {
-            uint8_t other = 1u - ch;
-            if (!Blowback_IsChannelBlowing(other)) {
-                copy_channel_out(other, nox_ppm, o2_pct, state);
-                return;
+        if (Blowback_IsChannelBlowing(ch)) {
+            for (uint8_t k = 0; k < NOX_SENSOR_COUNT; k++) {
+                if (k == ch || Blowback_IsChannelBlowing(k)) continue;
+                if (NoxChannel_IsValid(k)) {
+                    copy_channel_out(k, nox_ppm, o2_pct, state);
+                    return;
+                }
             }
         }
-        /* Selected invalid -> use other if valid; both invalid -> fault readback */
-        if (!NoxChannel_IsValid(ch) && NOX_SENSOR_COUNT >= 2u) {
-            uint8_t other = 1u - ch;
-            if (NoxChannel_IsValid(other) && !Blowback_IsChannelBlowing(other)) {
-                copy_channel_out(other, nox_ppm, o2_pct, state);
-                return;
+        if (!NoxChannel_IsValid(ch)) {
+            for (uint8_t k = 0; k < NOX_SENSOR_COUNT; k++) {
+                if (k == ch || Blowback_IsChannelBlowing(k)) continue;
+                if (NoxChannel_IsValid(k)) {
+                    copy_channel_out(k, nox_ppm, o2_pct, state);
+                    return;
+                }
             }
-        }
-        if (!NoxChannel_IsValid(ch) && (NOX_SENSOR_COUNT < 2u || !NoxChannel_IsValid(1u - ch)))
-            copy_fault_fallback(nox_ppm, o2_pct, state, s_single_channel_index);
-        else
+            copy_fault_fallback(nox_ppm, o2_pct, state, ch);
+        } else {
             copy_channel_out(ch, nox_ppm, o2_pct, state);
+        }
         return;
     }
 
@@ -265,10 +272,12 @@ void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state)
     }
 
     if (s_work_mode == NOX_MODE_FUSION) {
-        /* 融合：无主从；两路有效取平均，否则按 ch0→ch1 选一路，故障回退 ch0 */
-        if (NOX_SENSOR_COUNT >= 2u &&
-            NoxChannel_IsValid(0u) && NoxChannel_IsValid(1u) &&
-            !Blowback_IsChannelBlowing(0u) && !Blowback_IsChannelBlowing(1u)) {
+        /* 融合：多路有效取平均，否则按主备选一路 */
+        uint8_t n_ok = 0u;
+        for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
+            if (NoxChannel_IsValid(ch) && !Blowback_IsChannelBlowing(ch)) n_ok++;
+        }
+        if (n_ok >= 2u) {
             copy_fusion_out(nox_ppm, o2_pct, state);
             return;
         }

@@ -46,9 +46,10 @@ void BLOW_CONTROL(uint8_t ch, uint8_t state)
     BlowCh_t *sc = &s_ch[ch];
     /* Only one sensor may blow at a time (even in fusion mode). */
     if (state) {
-        uint8_t other = 1u - ch;
-        if (s_ch[other].blow_flag)
-            return;  /* Other channel is blowing, skip starting this one */
+        for (uint8_t k = 0; k < NOX_SENSOR_COUNT; k++) {
+            if (k != ch && s_ch[k].blow_flag)
+                return;  /* Another channel is blowing, skip starting this one */
+        }
         sc->blow_flag = 1;
         sc->blow_start_time_1s = time_1s;
         xTimerChangePeriod(sc->timer, pdMS_TO_TICKS((uint32_t)sc->blowtime * 1000u), portMAX_DELAY);

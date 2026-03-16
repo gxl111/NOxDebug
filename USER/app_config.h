@@ -50,10 +50,10 @@
 
 /* Multi-sensor: max channels (for future 3-way extension) */
 #define NOX_SENSOR_COUNT_MAX   3u
-/* Current number of sensors (2: SA 0x52 outlet, SA 0x51 inlet) */
-#define NOX_SENSOR_COUNT       2u
-/* Source addresses per channel: [0]=0x52, [1]=0x51 */
-#define NOX_SENSOR_SA_LIST     { 0x52u, 0x51u }
+/* Current number of sensors: ch0=CAN1 SA 0x52, ch1=CAN1 SA 0x51, ch2=CAN2(MCP2515) SA 0x52 */
+#define NOX_SENSOR_COUNT       3u
+/* Source addresses per channel: [0]=0x52 outlet, [1]=0x51 inlet, [2]=0x52 second CAN */
+#define NOX_SENSOR_SA_LIST     { 0x52u, 0x51u, 0x52u }
 
 /*
  * Factory Flash programming on boot:
