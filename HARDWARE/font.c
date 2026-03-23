@@ -1,6 +1,6 @@
 /**
  * @file font.c
- * @brief Font/glyph data for OLED
+ * @brief 字模数据（供 OLED 使用；当前应用已禁用 OLED）
  *
  * @attention
  * Companion to Baud-Dance OLED driver; ASCII built-in.

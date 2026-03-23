@@ -7,7 +7,7 @@
 #include <string.h>
 #include "usart.h"
 #include "tim.h"
-#include "oled.h"
+// #include "oled.h"  /* OLED 已禁用 */
 #include "modbus_host.h"
 #include "modbus_slave.h"
 

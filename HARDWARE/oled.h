@@ -1,5 +1,6 @@
 #ifndef __OLED_H__
 #define __OLED_H__
+/* 应用层已禁用 OLED；本头文件与 oled.c 仅保留供将来恢复 */
 
 #include "font.h"
 #include "main.h"
