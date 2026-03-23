@@ -7,7 +7,7 @@
 *	                                  User application includes
 *********************************************************************************************************
 */
-#include "oled.h"
+// #include "oled.h"  /* OLED 已禁用 */
 #include "modbus_slave.h"
 #include "NOx.h"
 
@@ -482,13 +482,13 @@ void WritetoSD(char filename[], BYTE write_buff[], uint8_t bufSize)
 	if(res == 1)
 	{
 		/* SD init failed (was printf) */
-        OLED_PrintASCIIString(0, 30, "sd init failed", &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_PrintASCIIString(0, 30, "sd init failed", &afont16x8, OLED_COLOR_NORMAL);
 	}
 	else
 	{
 		/* SD init ok (was printf) */
-        OLED_PrintASCIIString(0, 30, "sd init succeed", &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, "sd init succeed", &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
 	}
 	
 	res=f_mount(&fs,"0:",1);		/* mount volume */
@@ -507,8 +507,8 @@ void WritetoSD(char filename[], BYTE write_buff[], uint8_t bufSize)
 			if(res == FR_OK)
 			{
 				/* mount ok (was printf) */
-                OLED_PrintASCIIString(0, 30, "sd mount succeed", &afont16x8, OLED_COLOR_NORMAL);
-                OLED_ShowFrame();                   
+                // OLED_PrintASCIIString(0, 30, "sd mount succeed", &afont16x8, OLED_COLOR_NORMAL);
+                // OLED_ShowFrame();                   
 			}	
 		}
 		else
@@ -519,13 +519,13 @@ void WritetoSD(char filename[], BYTE write_buff[], uint8_t bufSize)
 	else if(res == FR_OK)
 	{
 		/* mount ok (was printf) */
-        OLED_PrintASCIIString(0, 30, "sd mount succeed", &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, "sd mount succeed", &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
 	}
 	else
 	{
 		/* mount failed (was printf) */
-        OLED_PrintASCIIString(0, 30, "sd mount failed", &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_PrintASCIIString(0, 30, "sd mount failed", &afont16x8, OLED_COLOR_NORMAL);
 	}	
 
 	res = f_open(&file,filename,FA_OPEN_ALWAYS |FA_WRITE);
@@ -538,14 +538,14 @@ void WritetoSD(char filename[], BYTE write_buff[], uint8_t bufSize)
 	if(res == FR_OK)
 	{
 /* open ok (was printf) */
-        OLED_PrintASCIIString(0, 30, "open succeed", &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, "open succeed", &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
 		res = f_write(&file,write_buff,bufSize,&Bw);		/* write to SD */
 		if(res == FR_OK)
 		{
 /* write ok (was printf) */
             snprintf(sdbuffer,sizeof(sdbuffer),"w s%d",Bw);
-            OLED_PrintASCIIString(0, 30,sdbuffer, &afont16x8, OLED_COLOR_NORMAL);	
+            // OLED_PrintASCIIString(0, 30,sdbuffer, &afont16x8, OLED_COLOR_NORMAL);	
 /* optional f_sync to flush */
 //            if (res == FR_OK) {
 //                OLED_PrintASCIIString(0, 30, "sync succeed", &afont16x8, OLED_COLOR_NORMAL);
@@ -557,7 +557,7 @@ void WritetoSD(char filename[], BYTE write_buff[], uint8_t bufSize)
 		else
 		{
 /* write failed (was printf) */
-            OLED_PrintASCIIString(0, 30, "write failed", &afont16x8, OLED_COLOR_NORMAL);	
+            // OLED_PrintASCIIString(0, 30, "write failed", &afont16x8, OLED_COLOR_NORMAL);	
 		}		
 	}
 	else
@@ -587,8 +587,8 @@ void WritetoSD(char filename[], BYTE write_buff[], uint8_t bufSize)
             default: strcpy(sdbuffer,"Unknown error\n"); break;
         }
         
-        OLED_PrintASCIIString(0, 30, sdbuffer, &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, sdbuffer, &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
 	}	
 	
 	f_close(&file);						/* close file */
@@ -612,27 +612,27 @@ FRESULT readConfig(const char* filename, SystemConfig* config) {
 	
 	if (sd_res == 1)
 	{
-        OLED_PrintASCIIString(0, 30, "sd init failed", &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, "sd init failed", &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
         return FR_NOT_READY;
 	}
 	else
 	{
-        OLED_PrintASCIIString(0, 30, "sd init succeed", &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();		
+        // OLED_PrintASCIIString(0, 30, "sd init succeed", &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();		
 	}
 	
 	res = f_mount(&fs, "0:", 1);		/* mount */
 	if (res == FR_NO_FILESYSTEM)
     {
-        OLED_PrintASCIIString(0, 30, "No Filesystem!", &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, "No Filesystem!", &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
         return FR_NO_FILESYSTEM;
     }
     else if (res != FR_OK)
     {
-        OLED_PrintASCIIString(0, 30, "mount failed!", &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, "mount failed!", &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
         return res;
     }
 
@@ -705,8 +705,8 @@ FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newVal
     if(res != FR_OK){
         ++n;
         sprintf(buf,"update open f%d",n);
-         OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
-         OLED_ShowFrame();        
+         // OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
+         // OLED_ShowFrame();        
          return res;
     }
 
@@ -716,8 +716,8 @@ FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newVal
         f_close(&file);
        ++n;
         sprintf(buf,"update open f%d",n);
-        OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
         return res;
     }
 
@@ -752,8 +752,8 @@ FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newVal
     if (res != FR_OK) {
         res = f_unlink(tmpName);
         sprintf(buf,"rename1 state:%d",res);
-        OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
         return res;
     }
 
@@ -765,23 +765,23 @@ FRESULT updateConfigParam(const char* filename, const char* key, uint32_t newVal
         res = f_unlink(tmpName);
         
         sprintf(buf,"rename2 state:%d",res);
-        OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
         return res;
     }
     
     res = f_unlink("config1.txt");
     if (res != FR_OK) {
         sprintf(buf,"unlink state:%d",res);
-        OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+        // OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
+        // OLED_ShowFrame();
         return res;
     }
     ++n;
     sprintf(buf,"update succeed%d",n);
-    OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
+    // OLED_PrintASCIIString(0, 30, buf, &afont16x8, OLED_COLOR_NORMAL);
 
-    OLED_ShowFrame();
+    // OLED_ShowFrame();
     return FR_OK;
 }
 
@@ -789,7 +789,7 @@ void handleConfig(void) {
 
     /* load config from SD */
     if(readConfig("config.txt", &config) == FR_OK) {
-       OLED_PrintASCIIString(0, 30, "read succeed      ", &afont16x8, OLED_COLOR_NORMAL);
+       // OLED_PrintASCIIString(0, 30, "read succeed      ", &afont16x8, OLED_COLOR_NORMAL);
 
         /* apply to UART/Modbus */
         SBAUD485=config.BaudRate;
@@ -826,9 +826,9 @@ void handleConfig(void) {
         HAL_UART_Init(&MDSUARTx);
         
     }else{
-       OLED_PrintASCIIString(0, 30, "read failed      ", &afont16x8, OLED_COLOR_NORMAL);    
+       // OLED_PrintASCIIString(0, 30, "read failed      ", &afont16x8, OLED_COLOR_NORMAL);    
     }
-    OLED_ShowFrame();
+    // OLED_ShowFrame();
        
     
 }

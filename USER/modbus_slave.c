@@ -10,7 +10,7 @@
 #include <string.h>
 #include "usart.h"
 #include "tim.h"
-#include "oled.h"
+// #include "oled.h"  /* OLED 已禁用 */
 #include "semphr.h"
 /*
 *********************************************************************************************************

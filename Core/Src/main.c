@@ -34,7 +34,7 @@
 #include "modbus_host.h"
 #include "J1939.h"
 #include "sdcard.h"
-#include "oled.h"
+// #include "oled.h"  /* OLED 已禁用 */
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/

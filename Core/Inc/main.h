@@ -79,10 +79,11 @@ void Error_Handler(void);
 #define REMOTE_CRT_GPIO_Port GPIOC
 #define SD_CS_Pin GPIO_PIN_8
 #define SD_CS_GPIO_Port GPIOC
-#define OLED_SCL_Pin GPIO_PIN_6
-#define OLED_SCL_GPIO_Port GPIOB
-#define OLED_SDA_Pin GPIO_PIN_7
-#define OLED_SDA_GPIO_Port GPIOB
+/* OLED I2C1 引脚（已禁用屏显；I2C1 仍用 PB6/PB7，见 i2c.c） */
+// #define OLED_SCL_Pin GPIO_PIN_6
+// #define OLED_SCL_GPIO_Port GPIOB
+// #define OLED_SDA_Pin GPIO_PIN_7
+// #define OLED_SDA_GPIO_Port GPIOB
 
 /* 阀门继电器 J1-J9：每传感器 3 个（正常抽气检测、反吹、校准），保持寄存器控制 */
 #define J1_IN_Pin   GPIO_PIN_4

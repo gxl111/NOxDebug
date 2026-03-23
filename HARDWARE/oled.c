@@ -1,5 +1,5 @@
 /**
- * FreeRTOS port
+ * OLED 驱动（SSD1306 / I2C1）。应用层已全部禁用对本模块的调用；文件保留便于以后恢复屏显。
  */
 #include "oled.h"
 #include "i2c.h"

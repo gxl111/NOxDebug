@@ -29,7 +29,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "NOx.h"
-#include "oled.h"
+// #include "oled.h"  /* OLED 已禁用 */
 #include "sdcard.h"
 #include "modbus_slave.h"
 /* USER CODE END Includes */
@@ -111,10 +111,9 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
-  OLED_Init();
-    
-  OLED_PrintASCIIString(0, 30, "waiting sd ", &afont16x8, OLED_COLOR_REVERSED);
-  OLED_ShowFrame();
+  // OLED_Init();
+  // OLED_PrintASCIIString(0, 30, "waiting sd ", &afont16x8, OLED_COLOR_REVERSED);
+  // OLED_ShowFrame();
   //WritetoSD(SD_FileName,WriteBuffer, sizeof(WriteBuffer));  
   handleConfig();
     

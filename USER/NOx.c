@@ -1,7 +1,7 @@
 /**
  * @file    NOx.c
  * @brief   NOx tasks: J1939 receive/handle (per channel), strategy (single/primary_backup/fusion),
- *          default task (calibration, alarm, blowback, OLED), Modbus slave init.
+ *          default task (calibration, alarm, blowback; OLED 已禁用), Modbus slave init.
  */
 #include "NOx.h"
 #include "FreeRTOS.h"
@@ -12,7 +12,7 @@
 #include "blowback.h"
 #include "calibration.h"
 #include "alarm.h"
-#include "oled.h"
+// #include "oled.h"  /* OLED 已禁用 */
 #include "sdcard.h"
 #include "app_config.h"
 #include "nox_channel.h"
@@ -123,13 +123,14 @@ void NOxReceive(void *argument)
             NoxSensor_To4_20mA(nox_out, o2_out, electricity_data_buf);
         }
 
-        /* OLED: S1/S2/S3（S3=第二路CAN SA 0x52）+ 当前输出 */
+#if 0  /* OLED: S1/S2/S3 + 当前输出（已禁用） */
         {
             uint8_t buf[28];
             float n1 = Var_Read_SensorLiveNox(0), o1 = Var_Read_SensorLiveO2(0);
             float n2 = Var_Read_SensorLiveNox(1), o2 = Var_Read_SensorLiveO2(1);
             uint16_t st1 = Var_Read_SensorStatus(0), st2 = Var_Read_SensorStatus(1);
             NoxChannel_t *c3 = &g_noxChannels[2];
+            (void)st1; (void)st2;
             snprintf((char *)buf, sizeof(buf), "S1 NOx %5.2f O2 %5.2f     ", (double)n1, (double)o1);
             OLED_PrintASCIIString(0, 10, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
             snprintf((char *)buf, sizeof(buf), "S2 NOx %5.2f O2 %5.2f     ", (double)n2, (double)o2);
@@ -142,6 +143,7 @@ void NOxReceive(void *argument)
             OLED_ColorMode c = (Var_Read_OutputChStatus() == 0x1FFu) ? OLED_COLOR_NORMAL : OLED_COLOR_REVERSED;
             OLED_PrintASCIIString(0, 42, (char *)buf, &afont8x6, c);
         }
+#endif
 
         /* Heater command: 第一路 CAN 发送；第二路 CAN（MCP2515）也发送 18FEDF55（文档 4.2 节）. */
         J1939_CAN_Transmit(&TxMessage);
@@ -159,10 +161,9 @@ void NOxReceive(void *argument)
     }
 }
 
-/* ----- Default task: calibration, alarm, blowback, run time, OLED refresh ----- */
+/* ----- Default task: calibration, alarm, blowback, run time; OLED 已禁用 ----- */
 void NOxDefault(void *argument)
 {
-    char buf[32];
     Blowback_Init();
 
     for (;;) {
@@ -175,9 +176,12 @@ void NOxDefault(void *argument)
         Alarm_Update();
         Blowback_Update();
 
+#if 0
+        char buf[32];
         snprintf(buf, sizeof(buf), "Time:    %lus", (unsigned long)time_1s);
         OLED_PrintASCIIString(0, 1, buf, &afont8x6, OLED_COLOR_NORMAL);
         OLED_ShowFrame();
+#endif
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }
