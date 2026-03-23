@@ -37,7 +37,7 @@
 /** Stagger between ch0 and ch1 periodic blowback start (s). Ch1 fires at (n*interval + stagger). */
 #define BLOW_STAGGER_SEC        300u
 
-/* 4¨C20 mA output: full-scale NOx (ppm) and O2 (%) */
+/* 4-20 mA output: full-scale NOx (ppm) and O2 (%) */
 #define NOX_FS_PPM   2500.0f
 #define O2_FS_PCT    25.0f
 /* 4 mA = 4000, 20 mA = 20000 in internal units (e.g. 0.1 ?A or DAC step) */
@@ -50,10 +50,10 @@
 
 /* Multi-sensor: max channels (for future 3-way extension) */
 #define NOX_SENSOR_COUNT_MAX   3u
-/* Current number of sensors (2: SA 0x52 outlet, SA 0x51 inlet) */
-#define NOX_SENSOR_COUNT       2u
-/* Source addresses per channel: [0]=0x52, [1]=0x51 */
-#define NOX_SENSOR_SA_LIST     { 0x52u, 0x51u }
+/* Current number of sensors: ch0=CAN1 SA 0x52, ch1=CAN1 SA 0x51, ch2=CAN2(MCP2515) SA 0x52 */
+#define NOX_SENSOR_COUNT       3u
+/* Source addresses per channel: [0]=0x52 outlet, [1]=0x51 inlet, [2]=0x52 second CAN */
+#define NOX_SENSOR_SA_LIST     { 0x52u, 0x51u, 0x52u }
 
 /*
  * Factory Flash programming on boot:
@@ -69,5 +69,12 @@ typedef enum {
     NOX_MODE_PRIMARY_BACKUP,   /* Use first valid channel; switch on fault/blowback */
     NOX_MODE_FUSION           /* Average of all valid channels */
 } NoxWorkMode_t;
+
+/*
+ * Sensor power control: 0 = do not drive GPIO (power_on register still R/W in Modbus).
+ * 1 = drive reserved GPIO from each sensor's power_on register (see main.h SENSOR_POWERx).
+ * GPIO pins reserved in main.h; change when hardware is defined.
+ */
+#define SENSOR_POWER_GPIO_ENABLE   0
 
 #endif /* __APP_CONFIG_H */

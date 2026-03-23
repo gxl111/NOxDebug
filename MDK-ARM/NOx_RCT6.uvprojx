@@ -781,6 +781,11 @@
               <FilePath>..\USER\modbus.c</FilePath>
             </File>
             <File>
+              <FileName>mcp2515_spi_can.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\mcp2515_spi_can.c</FilePath>
+            </File>
+            <File>
               <FileName>modbus.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\USER\modbus.h</FilePath>

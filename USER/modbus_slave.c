@@ -5,6 +5,7 @@
 
 #include "modbus_slave.h"
 #include "nox_channel.h"
+#include "app_config.h"
 #include "main.h"
 #include <string.h>
 #include "usart.h"
@@ -58,16 +59,15 @@ static float RegistersToFloat_BE(uint16_t reg1, uint16_t reg2);
 
 
 /*
-*********************************************************************************************************
-*	                                   ????
-*********************************************************************************************************
-*/
+ * Modbus slave globals and helpers
+ */
 
 
 
 MODS_T g_tModS = {0};
 VAR_T g_tVar = { .S1 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu },
-                 .S2 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu } };
+                 .S2 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu },
+                 .S3 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu } };
 
 /* Mutex-protected read/write macros for single g_tVar fields; avoid repeating LOCK_VAR/UNLOCK_VAR. */
 #define VAR_READ_U16(member, ret)   do { LOCK_VAR(); (ret) = g_tVar.member; UNLOCK_VAR(); } while(0)
@@ -80,27 +80,12 @@ VAR_T g_tVar = { .S1 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu },
 QueueHandle_t MODRx_SemaphoreHandle;
 
 
-// Relay GPIO table (D01-D04)
-// Relay pins: Relay0/1 blowback, Relay2/3 calibration etc.
-typedef struct {
-    GPIO_TypeDef* port;
-    uint16_t pin;
-} GPIOPin_t;
-
-// Relay port/pin array for coil readback
-const GPIOPin_t relayPins[] = {
-    {Relay0_GPIO_Port, Relay0_Pin},
-    {Relay1_GPIO_Port, Relay1_Pin},
-    {Relay2_GPIO_Port, Relay2_Pin},
-    {Relay3_GPIO_Port, Relay3_Pin}
-};
+/* 线圈 D01-D04 已废弃，阀门改由保持寄存器 40053-40055/40095-40097/40137-40139 控制 J1-J9 */
 
 
 /*
-*********************************************************************************************************
-*	                                  ????????
-*********************************************************************************************************
-*/
+ * Start UART RX interrupt for next byte
+ */
 
 void Start_Receive(void){
      HAL_UART_Receive_IT(&MDSUARTx,&rx_data, 1);
@@ -141,7 +126,7 @@ void MODS_Poll(void)
             goto err_ret;
         }
 
-        /* dispatch: MODS_AnalyzeApp ?????????????????????????? NOxDefault ????? list ?????? */
+        /* Parse function code and build response (same lock order as NOxDefault task) */
 				MODS_AnalyzeApp();
     
     }
@@ -176,20 +161,15 @@ void StartHardTimer(uint32_t _uiTimeOut, void * _pCallBack) {
 
 
 /*
-*********************************************************************************************************
-*	?? ?? ??: HAL_TIM_OC_DelayElapsedCallback
-*	???????: tim2?????????????????3.5????????????????
-*	??    ??: ??
-*	?? ?? ??: ??
-*********************************************************************************************************
-*/
+ * HAL_TIM_OC_DelayElapsedCallback (legacy): TIM2 CC1 used for 3.5 char timeout; optional.
+ */
 
 //void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
 //    if (htim->Instance == TIM2) {
-//        // ???????????1????????
+
 //        if (__HAL_TIM_GET_FLAG(htim, TIM_FLAG_CC1) != RESET) {
 //            __HAL_TIM_CLEAR_FLAG(htim, TIM_FLAG_CC1);
-//          //???????
+
 //          __HAL_TIM_DISABLE_IT(&htim2, TIM_IT_CC1);
 //            if (s_TIM_CallBack1 != NULL) {
 //                s_TIM_CallBack1();
@@ -210,14 +190,12 @@ void MODS_ReciveNew(uint8_t _byte)
     uint8_t i;
 
     /* Find baud in table to get timeout (us); timer 1 = slave, timer 2 = host */
-    for(i = 0; i < MODBUS_BAUD_RATE_LEN; i++)
-    {
-        if(SBAUD485 == ModbusBaudRate[i].Bps)
-        {
-
+    for (i = 0; i < MODBUS_BAUD_RATE_LEN; i++) {
+        if (SBAUD485 == ModbusBaudRate[i].Bps)
             break;
-        }
     }
+    if (i >= MODBUS_BAUD_RATE_LEN)
+        i = MODBUS_BAUD_RATE_LEN - 1;  /* default to last entry if baud not in table */
 
     /* Start timer (us); TIM1 for slave, TIM2 for host */
     StartHardTimer(ModbusBaudRate[i].usTimeOut, (void *)MODS_RxTimeOut);
@@ -355,34 +333,8 @@ static void MODS_AnalyzeApp(void)
 /* Note: LED/relay state read back from GPIO */
 static void MODS_01H(void)
 {
-    /*
-     ??????
-    	????????:
-    		01 ??????
-    		01 ??????
-    		00 ?????????????????
-    		13 ?????????????????
-    		00 ??????????????
-    		25 ??????????????
-    		0E CRC?????????
-    		84 CRC?????????
-
-    	??????: 	1????ON??0????OFF?????????????????8????????????????????????????0????. BIT0?????1??
-    		01 ??????
-    		01 ??????
-    		05 ?????????
-    		CD ????1(???0013H-???001AH)
-    		6B ????2(???001BH-???0022H)
-    		B2 ????3(???0023H-???002AH)
-    		0E ????4(???0032H-???002BH)
-    		1B ????5(???0037H-???0033H)
-    		45 CRC?????????
-    		E6 CRC?????????
-
-    	????:
-    		01 01 00 01 00 03   xx xx	--- ?????D01?????3??????????
-    		01 01 00 03 00 01   xx xx   --- ?????D03??????????
-    */
+    /* 01H request: addr, 01, start coil, qty; response: addr, 01, byte count, coil data, CRC.
+     * Coil map: D01-D04 map to relay GPIO readback. */
     uint16_t reg;
     uint16_t num;
     uint16_t i;
@@ -391,25 +343,20 @@ static void MODS_01H(void)
 
     g_tModS.RspCode = RSP_OK;
 
-    /** ??1???? ????????????????? ===============================================================*/
-    /*  ?????????????????????
-    	?????8bit??+?????8bit??+???????????????????16bit??+???????????16bit??+ CRC16
-    */
+    /* Step 1: fixed 8-byte request for 01H */
     if (g_tModS.RxCount != 8)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;				/* ??????????? */
+        g_tModS.RspCode = RSP_ERR_VALUE;
         return;
     }
 
-    /** ??2???? ??????? ===========================================================================*/
-    /* ???????????????????????? 0???????? */
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 			/* ??????? */
-    num = BEBufToUint16(&g_tModS.RxBuf[4]);				/* ????????? */
+    /* Step 2: parse start address and quantity */
+    reg = BEBufToUint16(&g_tModS.RxBuf[2]);
+    num = BEBufToUint16(&g_tModS.RxBuf[4]);
 
-    /* ??????????????????? */
-    m = (num + 7) / 8;
-    
-    /* ?????????????????????? */
+    m = (num + 7) / 8;   /* response data bytes */
+
+    /* Step 3: validate coil range REG_D01..REG_DXX */
     if ( (num > 0) && (reg + num+ REG_D01 <= REG_DXX + 1))
     {
         for (i = 0; i < m; i++)
@@ -420,40 +367,37 @@ static void MODS_01H(void)
         LOCK_VAR();
         for (i = 0; i < num; i++)
         {
-            //???????????
-            GPIO_PinState state = HAL_GPIO_ReadPin(relayPins[i].port, relayPins[i].pin);
-            switch(i) {
-                case 0: g_tVar.coil_d01 = state; break;
-                case 1: g_tVar.coil_d02 = state; break;
-                case 2: g_tVar.coil_d03 = state; break;
-                case 3: g_tVar.coil_d04 = state; break;
+            uint8_t state = 0;
+            switch (i) {
+                case 0: state = g_tVar.coil_d01 ? 1 : 0; break;
+                case 1: state = g_tVar.coil_d02 ? 1 : 0; break;
+                case 2: state = g_tVar.coil_d03 ? 1 : 0; break;
+                case 3: state = g_tVar.coil_d04 ? 1 : 0; break;
             }
-            status[i / 8]|=(state<< (i % 8));
+            status[i / 8] |= (state << (i % 8));
         }
         UNLOCK_VAR();
     }
     else
     {
-        g_tModS.RspCode = RSP_ERR_REG_ADDR;				/* ????????????? */
+        g_tModS.RspCode = RSP_ERR_REG_ADDR;				
     }
     
-    /** ??3???? ??????? =========================================================================*/
-    if (g_tModS.RspCode == RSP_OK)						/* ?????? */
+    /* Step 4: build response */
+    if (g_tModS.RspCode == RSP_OK)
     {
         g_tModS.TxCount = 0;
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[0]; /* ????????? */
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[1]; /* ????????? */
-        g_tModS.TxBuf[g_tModS.TxCount++] = m;				 /* ????????? */
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[0];
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[1];
+        g_tModS.TxBuf[g_tModS.TxCount++] = m;
 
         for (i = 0; i < m; i++)
-        {
-            g_tModS.TxBuf[g_tModS.TxCount++] = status[i];	/* ??????????? */
-        }
+            g_tModS.TxBuf[g_tModS.TxCount++] = status[i];
         MODS_SendWithCRC(g_tModS.TxBuf, g_tModS.TxCount);
     }
     else
     {
-        MODS_SendAckErr(g_tModS.RspCode);				/* ???????????????? */
+        MODS_SendAckErr(g_tModS.RspCode);
     }
 }
 
@@ -468,46 +412,7 @@ static void MODS_01H(void)
 */
 static void MODS_03H(void)
 {
-    /*
-    	????????11H????????????????????006BH???????????006DH??????????????????3????????????
-
-    	????????:
-    		11 ??????
-    		03 ??????
-    		00 ??????????????
-    		6B ??????????????
-    		00 ??????????????
-    		03 ??????????????
-    		76 CRC??????
-    		87 CRC??????
-
-    	??????: 	???????????????2????????????????????????????????????????????????????
-    				?????????????????????????????????????????????????????????????????
-    		11 ??????
-    		03 ??????
-    		06 ?????
-    		00 ????1??????(006BH)
-    		6B ????1??????(006BH)
-    		00 ????2??????(006CH)
-    		13 ????2 ??????(006CH)
-    		00 ????3??????(006DH)
-    		00 ????3??????(006DH)
-    		38 CRC??????
-    		B9 CRC??????
-
-    	????:
-    		01 03 30 06 00 01  6B0B      ---- ?? 3006H, ????????
-    		01 03 4000 0010 51C6         ---- ?? 4000H ??????1????????? 32???
-    		01 03 4001 0010 0006         ---- ?? 4001H ??????1????????? 32???
-
-    		01 03 F000 0008 770C         ---- ?? F000H ??????1????????? 16???
-    		01 03 F001 0008 26CC         ---- ?? F001H ??????2????????? 16???
-
-    		01 03 7000 0020 5ED2         ---- ?? 7000H ??????1????????????1?? 64???
-    		01 03 7001 0020 0F12         ---- ?? 7001H ??????1????????????2?? 64???
-
-    		01 03 7040 0020 5F06         ---- ?? 7040H ??????2????????????1?? 64???
-    */
+    /* 03H: read holding registers; request 8 bytes + CRC; response payload up to 200 bytes (100 regs). */
     uint16_t reg;
     uint16_t num;
     uint16_t i;
@@ -516,23 +421,21 @@ static void MODS_03H(void)
 
     g_tModS.RspCode = RSP_OK;
 
-    /** ??1???? ????????????????? ===============================================================*/
-    /* ?????8bit??+?????8bit??+???????????????????16bit??+???????????16bit??+ CRC16 */
-    if (g_tModS.RxCount != 8)								/* 03H?????????8????? */
+    if (g_tModS.RxCount != 8)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;					/* ??????????? */
+        g_tModS.RspCode = RSP_ERR_VALUE;
         goto err_ret;
     }
 
-    /** ??2???? ??????? ===========================================================================*/
-    /* ???????????????????????? */
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 				/* ??????? */
-    num = BEBufToUint16(&g_tModS.RxBuf[4]);					/* ????????? */
+    /* Step 2: parse request */
+    
+    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 				
+    num = BEBufToUint16(&g_tModS.RxBuf[4]);					
 
-    /* ??????????????????????? */
+    
     //
 //    if(reg+SLAVE_REG_START+num-1>SLAVE_REG_END){
-//        g_tModS.RspCode = RSP_ERR_VALUE;					/* ??????????? */
+
 //        goto err_ret;    
 //    }
     /* Max 100 registers per 03H (200 bytes payload); Modbus spec allows up to 125 */
@@ -542,48 +445,48 @@ static void MODS_03H(void)
         goto err_ret;
     }
     
-    /* ?????????????reg_value???? */
-    for (i = 0; i < num; i++)
+    
+    for (i = 0; i < num; )
     {
-
-         uint8_t read_state=MODS_ReadRegValue(reg, &reg_value[2 * i]);
-         if ( read_state== 0)	/* ??????????????reg_value?????????????????????????????? */
-        {
-            g_tModS.RspCode = RSP_ERR_REG_ADDR;				/* ????????????? */
+         uint8_t read_state = MODS_ReadRegValue(reg, &reg_value[2 * i]);
+         if (read_state == 0) {
+            g_tModS.RspCode = RSP_ERR_REG_ADDR;
             break;
-        }else if(read_state==2){
-            //??????
-            ++i;
-            ++reg;
-        }
-
-         ++reg;
-
+         }
+         if (read_state == 2) {
+            /* Float: 2 registers = 4 bytes; advance by 2 slots to avoid overwrite */
+            i += 2;
+            reg += 2;
+         } else {
+            /* Single 16-bit register */
+            i++;
+            reg++;
+         }
     }
     
-    /** ??3???? ??????? =========================================================================*/
+    /* Step 3: send response or exception */
 err_ret:
-    if (g_tModS.RspCode == RSP_OK)							 /* ?????? */
+    if (g_tModS.RspCode == RSP_OK)							 
     {
         g_tModS.TxCount = 0;
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[0]; /* ????????? */
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[1]; /* ????????? */
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[0]; 
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[1]; 
 
-        g_tModS.TxBuf[g_tModS.TxCount++] =num * 2;			 /* ????????? */
+        g_tModS.TxBuf[g_tModS.TxCount++] =num * 2;			 
       
         
 
-        for (i = 0; i < num; i++)                            /* ????????*/
+        for (i = 0; i < num; i++)                            
         {
             g_tModS.TxBuf[g_tModS.TxCount++] = reg_value[2*i];
             g_tModS.TxBuf[g_tModS.TxCount++] = reg_value[2*i+1];
         }
 
-        MODS_SendWithCRC(g_tModS.TxBuf, g_tModS.TxCount);	/* ??????????? */
+        MODS_SendWithCRC(g_tModS.TxBuf, g_tModS.TxCount);	
     }
     else
     {
-        MODS_SendAckErr(g_tModS.RspCode);					/* ?????????? */
+        MODS_SendAckErr(g_tModS.RspCode);					
     }
 }
 
@@ -596,102 +499,57 @@ err_ret:
 */
 static void MODS_05H(void)
 {
-    /*
-    	????????: ????????????????FF00H?????????????ON????0000H?????????????OFF???
-    	??05H???????????????????15H???????????????????????
-    		11 ??????
-    		05 ??????
-    		00 ??????????????
-    		AC ??????????????
-    		FF ????1??????
-    		00 ????2??????
-    		4E CRC?????????
-    		8B CRC?????????
-
-    	??????:
-    		11 ??????
-    		05 ??????
-    		00 ??????????????
-    		AC ??????????????
-    		FF ?????1??????
-    		00 ?????1??????
-    		4E CRC?????????
-    		8B CRC?????????
-
-    	????:
-    	01 05 10 01 FF 00   D93A   -- D01??
-    	01 05 10 01 00 00   98CA   -- D01???
-
-    	01 05 10 02 FF 00   293A   -- D02??
-    	01 05 10 02 00 00   68CA   -- D02???
-
-    	01 05 10 03 FF 00   78FA   -- D03??
-    	01 05 10 03 00 00   390A   -- D03???
-    */
+    /* 05H: write single coil; value FF00 = ON, 0000 = OFF. Maps to D01-D04 relays. */
     uint16_t reg;
     uint16_t value;
 
     g_tModS.RspCode = RSP_OK;
 
-    /** ??1???? ????????????????? ===============================================================*/
-    /* ?????8bit??+?????8bit??+???????????????????16bit??+???????????16bit??+ CRC16 */
+    /* Step 1: validate frame length */
+    
     if (g_tModS.RxCount != 8)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;		/* ??????????? */
+        g_tModS.RspCode = RSP_ERR_VALUE;		
         goto err_ret;
     }
 
-    /** ??2???? ??????? ===========================================================================*/
-    /* ???????????????????????? */
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 	/* ??????? */
-    value = BEBufToUint16(&g_tModS.RxBuf[4]);	/* ???? */
+    /* Step 2: parse request */
+    
+    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 	
+    value = BEBufToUint16(&g_tModS.RxBuf[4]);	
 
     if (value != 0x0000 && value != 0xFF00)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;		/* ??????????? */
+        g_tModS.RspCode = RSP_ERR_VALUE;		
         goto err_ret;
     }
     if(value == 0xFF00)value =1;
     
     
-    /* ???????? ????????????FF00H?????????????ON????0000H?????????????OFF???*/
-    LOCK_VAR();
-    if (reg+REG_D01 == REG_D01)
-    {
-        
-        g_tVar.coil_d01 = value;
-        HAL_GPIO_WritePin(relayPins[0].port, relayPins[0].pin,(GPIO_PinState)value);
-    }
-    else if (reg+REG_D01 == REG_D02)
-    {
-        g_tVar.coil_d02 = value;
-        HAL_GPIO_WritePin(relayPins[1].port, relayPins[1].pin,(GPIO_PinState)value);
-    }
-    else if (reg+REG_D01 == REG_D03)
-    {
-        g_tVar.coil_d03 = value;
-        HAL_GPIO_WritePin(relayPins[2].port, relayPins[2].pin,(GPIO_PinState)value);
-    }
-    else if (reg+REG_D01 == REG_D04)
-    {
-        g_tVar.coil_d04 = value;
-        HAL_GPIO_WritePin(relayPins[3].port, relayPins[3].pin,(GPIO_PinState)value);
-    }
-    else
-    {
-        g_tModS.RspCode = RSP_ERR_REG_ADDR;		/* ????????????? */
-    }
-    UNLOCK_VAR();
     
-    /** ??3???? ??????? =========================================================================*/
+    LOCK_VAR();
+    if (reg + REG_D01 == REG_D01)
+        g_tVar.coil_d01 = value;
+    else if (reg + REG_D01 == REG_D02)
+        g_tVar.coil_d02 = value;
+    else if (reg + REG_D01 == REG_D03)
+        g_tVar.coil_d03 = value;
+    else if (reg + REG_D01 == REG_D04)
+        g_tVar.coil_d04 = value;
+    else
+        g_tModS.RspCode = RSP_ERR_REG_ADDR;
+    UNLOCK_VAR();
+    /* 线圈不再驱动 GPIO，阀门由保持寄存器 40053 等控制 */
+    
+    /* Step 3: send response or exception */
 err_ret:
-    if (g_tModS.RspCode == RSP_OK)				/* ?????? */
+    if (g_tModS.RspCode == RSP_OK)				
     {
         MODS_SendAckOk();
     }
     else
     {
-        MODS_SendAckErr(g_tModS.RspCode);		/* ???????????????? */
+        MODS_SendAckErr(g_tModS.RspCode);		
     }
 }
 
@@ -703,87 +561,47 @@ err_ret:
 */
 static void MODS_06H(void)
 {
-
-    /*
-    	???????????????06????????????????????????16??????????????????????????????
-
-    	????????:
-    		11 ??????
-    		06 ??????
-    		00 ??????????????
-    		01 ??????????????
-    		00 ????1??????
-    		01 ????1??????
-    		9A CRC?????????
-    		9B CRC?????????
-
-    	??????:
-    		11 ??????
-    		06 ??????
-    		00 ??????????????
-    		01 ??????????????
-    		00 ????1??????
-    		01 ????1??????
-    		1B CRC?????????
-    		5A	CRC?????????
-
-    	????:
-    		01 06 30 06 00 25  A710    ---- ?????????????? 2.5
-    		01 06 30 06 00 10  6707    ---- ?????????????? 1.0
-
-
-    		01 06 30 1B 00 00  F6CD    ---- SMA ?????? = 0 ??????
-    		01 06 30 1B 00 01  370D    ---- SMA ?????? = 1
-    		01 06 30 1B 00 02  770C    ---- SMA ?????? = 2
-    		01 06 30 1B 00 05  36CE    ---- SMA ?????? = 5
-
-    		01 06 30 07 00 01  F6CB    ---- ??????????? T1
-    		01 06 30 07 00 02  B6CA    ---- ??????????? T2
-
-    		01 06 31 00 00 00  8736    ---- ?????????????
-    		01 06 31 01 00 00  D6F6    ---- ???????????????
-
-    */
+    /* 06H: write single holding register; 8-byte request + CRC; echo request on success. */
 
     uint16_t reg;
     uint8_t write_state;
 
     g_tModS.RspCode = RSP_OK;
 
-    /** ??1???? ????????????????? ===============================================================*/
-    /* ?????8bit??+????8bit??+???????????????????16bit??+????????16bit??+ CRC16 */
+    /* Step 1: validate frame length */
+    
     if (g_tModS.RxCount != 8)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;		/* ??????????? */
+        g_tModS.RspCode = RSP_ERR_VALUE;		
         goto err_ret;
     }
 
-    /** ??2???? ??????? ===========================================================================*/
-    /* ???????????????????????? */
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 	/* ??????? */
-    //value = BEBufToUint16(&g_tModS.RxBuf[4]);	/* ??????? */
+    /* Step 2: parse request */
+    
+    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 	
+
     
     write_state = MODS_WriteRegValue(reg, &g_tModS.RxBuf[4]);
     
-    if (write_state!=0)	/* ??????????????????????? */
+    if (write_state!=0)	
     {
         ;
     }
     else
     {
-        g_tModS.RspCode = RSP_ERR_REG_ADDR;		/* ????????????? */
+        g_tModS.RspCode = RSP_ERR_REG_ADDR;		
          
     }
 
-    /** ??3???? ??????? =========================================================================*/
+    /* Step 3: send response or exception */
 err_ret:
-    if (g_tModS.RspCode == RSP_OK)				/* ?????? */
+    if (g_tModS.RspCode == RSP_OK)				
     {
         MODS_SendAckOk();
     }
     else
     {
-        MODS_SendAckErr(g_tModS.RspCode);		/* ???????????????? */
+        MODS_SendAckErr(g_tModS.RspCode);		
     }
 }
 
@@ -795,40 +613,7 @@ err_ret:
 */
 static void MODS_10H(void)
 {
-    /*
-    	????????11H????????????????????0001H?????????????????0002H?????????2?????????
-    	????????0001H???????000AH??????????0002H???????0102H??
-
-    	????????:
-    		11 ??????
-    		10 ??????
-    		00 ?????????????????
-    		01 ?????????????????
-    		00 ??????????????
-    		02 ??????????????
-    		04 ?????
-    		00 ????1??????
-    		0A ????1??????
-    		01 ????2??????
-    		02 ????2??????
-    		C6 CRC?????????
-    		F0 CRC?????????
-
-    	??????:
-    		11 ??????
-    		06 ??????
-    		00 ??????????????
-    		01 ??????????????
-    		00 ????1??????
-    		01 ????1??????
-    		1B CRC?????????
-    		5A	CRC?????????
-
-    	????:
-    		01 10 30 00 00 06 0C  07 DE  00 0A  00 01  00 08  00 0C  00 00     389A    ---- ????? 2014-10-01 08:12:00
-    		01 10 30 00 00 06 0C  07 DF  00 01  00 1F  00 17  00 3B  00 39     5549    ---- ????? 2015-01-31 23:59:57
-
-    */
+    /* 10H: write multiple registers; byte count must equal 2 * reg count; MODS_WriteRegValue per word. */
     uint16_t reg_addr;
     uint16_t reg_num;
     uint16_t byte_num;
@@ -838,33 +623,33 @@ static void MODS_10H(void)
 
     g_tModS.RspCode = RSP_OK;
 
-    /** ??1???? ????????????????? ===============================================================*/
-    /* ?????8bit??+?????8bit??+???????????????????16bit??+???????????16bit??+ ???????8bit??+ ???????????16bit??+ CRC16 */
+    /* Step 1: validate frame length */
+    
     if (g_tModS.RxCount < 11)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;			/* ??????????? */
+        g_tModS.RspCode = RSP_ERR_VALUE;			
         goto err_ret;
     }
 
-    /** ??2???? ??????? ===========================================================================*/
-    /* ???????????????????????? */
-    reg_addr = BEBufToUint16(&g_tModS.RxBuf[2]); 	/* ??????? */
-    reg_num = BEBufToUint16(&g_tModS.RxBuf[4]);		/* ????????? */
-    byte_num = g_tModS.RxBuf[6];					/* ???????????????? */
+    /* Step 2: parse request */
+    
+    reg_addr = BEBufToUint16(&g_tModS.RxBuf[2]); 	
+    reg_num = BEBufToUint16(&g_tModS.RxBuf[4]);		
+    byte_num = g_tModS.RxBuf[6];					
 
-    /* ???????????????????????????????? */
+    
     if (byte_num != 2 * reg_num)
     {
-        g_tModS.RspCode = RSP_ERR_VALUE;			/* ??????????? */
+        g_tModS.RspCode = RSP_ERR_VALUE;			
         goto err_ret;
     }
     
     
-    /* ???????? */
+    
     for (i = 0; i < reg_num; i++)
     {
         
-        //value = BEBufToUint16(&g_tModS.RxBuf[7 + 2 * i]);	/* ??????? */
+
         
         uint8_t write_state=MODS_WriteRegValue(reg_addr, &g_tModS.RxBuf[7 + 2 * i]);
         if (write_state == 2)
@@ -874,22 +659,22 @@ static void MODS_10H(void)
         }
         else if(write_state == 0)
         {
-            g_tModS.RspCode = RSP_ERR_REG_ADDR;		/* ????????????? */
+            g_tModS.RspCode = RSP_ERR_REG_ADDR;		
            
             break;
         }
         ++reg_addr;
     }
     
-    /** ??3???? ??????? =========================================================================*/
+    /* Step 3: send response or exception */
 err_ret:
-    if (g_tModS.RspCode == RSP_OK)					/* ?????? */
+    if (g_tModS.RspCode == RSP_OK)					
     {
         MODS_SendAckOk();
     }
     else
     {
-        MODS_SendAckErr(g_tModS.RspCode);			/* ???????????????? */
+        MODS_SendAckErr(g_tModS.RspCode);			
     }
 }
 
@@ -920,29 +705,28 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
             case SLAVE_REG_ALARM_O2_LO:     f_value = g_tVar.alarm_o2_lo; f_flag = 1; break;
             case SLAVE_REG_MA_NOX:          value = g_tVar.ma_nox; break;
             case SLAVE_REG_MA_O2:           value = g_tVar.ma_o2; break;
-            case SLAVE_REG_WORK_MODE: {
-                /* Stored: low byte = mode; high byte only for single-mode channel select.
-                 * Readback for mode 1/2: high byte = active output channel (real-time):
-                 *   0x0101 = primary-backup + S2 driving; 0x0100 = mode1 + S1 driving.
-                 * Single mode (low byte 0): return stored value unchanged. */
-                uint16_t stored = g_tVar.work_mode;
-                uint8_t mode = (uint8_t)(stored & 0xFFu);
-                if (mode == 0u)
-                    value = stored;
-                else
-                    value = ((uint16_t)NoxChannel_GetActiveOutputChannel() << 8) | (uint16_t)mode;
+            case SLAVE_REG_WORK_MODE:
+                /* Read: work mode only (0/1/2). Single-channel index and runtime source are in P35. */
+                value = (uint16_t)(g_tVar.work_mode & 0xFFu);
                 break;
-            }
+            case SLAVE_REG_OUTPUT_SENSOR:
+                /* P35 R-only: 0b01=S0 0b10=S1 0b11=fusion 0b100=S2(CAN2) 0b00=fault */
+                value = (uint16_t)NoxChannel_GetOutputSensorReg();
+                break;
             default: UNLOCK_VAR(); return 0;
         }
         UNLOCK_VAR();
-    } else if (addr >= SENSOR_BASE_1 && addr <= SLAVE_REG_S1_BLOW_CMD) {
+    } else if (addr >= SENSOR_BASE_1 && addr <= SLAVE_REG_S1_VALVE_CAL) {
         LOCK_VAR();
         s = &g_tVar.S1;
         goto sensor_read;
-    } else if (addr >= SENSOR_BASE_2 && addr <= SLAVE_REG_S2_BLOW_CMD) {
+    } else if (addr >= SENSOR_BASE_2 && addr <= SLAVE_REG_S2_VALVE_CAL) {
         LOCK_VAR();
         s = &g_tVar.S2;
+        goto sensor_read;
+    } else if (addr >= SENSOR_BASE_3 && addr <= SLAVE_REG_S3_VALVE_CAL) {
+        LOCK_VAR();
+        s = &g_tVar.S3;
         goto sensor_read;
     } else {
         return 0;
@@ -951,54 +735,93 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
 
 sensor_read:
     switch (addr) {
-        case 40013: case 40014: f_value = s->live_nox; f_flag = 1; break;
-        case 40015: case 40016: f_value = s->live_o2;  f_flag = 1; break;
-        case 40017: value = s->status; break;
-        case 40018: case 40019: f_value = s->seg1_nox_a; f_flag = 1; break;
-        case 40020: case 40021: f_value = s->seg1_nox_b; f_flag = 1; break;
-        case 40022: case 40023: f_value = s->seg1_o2_a;  f_flag = 1; break;
-        case 40024: case 40025: f_value = s->seg1_o2_b;  f_flag = 1; break;
-        case 40026: case 40027: f_value = s->seg2_nox_a; f_flag = 1; break;
-        case 40028: case 40029: f_value = s->seg2_nox_b; f_flag = 1; break;
-        case 40030: case 40031: f_value = s->seg2_o2_a;  f_flag = 1; break;
-        case 40032: case 40033: f_value = s->seg2_o2_b;  f_flag = 1; break;
-        case 40034: case 40035: f_value = s->p2_nox; f_flag = 1; break;
-        case 40036: case 40037: f_value = s->p2_o2;  f_flag = 1; break;
-        case 40038: case 40039: f_value = s->p3_nox; f_flag = 1; break;
-        case 40040: case 40041: f_value = s->p3_o2;  f_flag = 1; break;
-        case 40042: value = s->nox_cal_trig; break;
-        case 40043: value = s->nox_pt_sel; break;
-        case 40044: value = s->o2_cal_trig; break;
-        case 40045: value = s->o2_pt_sel; break;
-        case 40046: value = s->blow_interval; break;
-        case 40047: value = s->blow_duration; break;
-        case 40048: value = s->blow_status; break;
-        case 40049: value = s->blow_countdown; break;
-        case 40050: value = s->blow_cmd; break;
-        case 40056: case 40057: f_value = s->seg1_nox_a; f_flag = 1; break;
-        case 40058: case 40059: f_value = s->seg1_nox_b; f_flag = 1; break;
-        case 40060: case 40061: f_value = s->seg1_o2_a;  f_flag = 1; break;
-        case 40062: case 40063: f_value = s->seg1_o2_b;  f_flag = 1; break;
-        case 40064: case 40065: f_value = s->seg2_nox_a; f_flag = 1; break;
-        case 40066: case 40067: f_value = s->seg2_nox_b; f_flag = 1; break;
-        case 40068: case 40069: f_value = s->seg2_o2_a;  f_flag = 1; break;
-        case 40070: case 40071: f_value = s->seg2_o2_b;  f_flag = 1; break;
-        case 40072: case 40073: f_value = s->p2_nox; f_flag = 1; break;
-        case 40074: case 40075: f_value = s->p2_o2;  f_flag = 1; break;
-        case 40076: case 40077: f_value = s->p3_nox; f_flag = 1; break;
-        case 40078: case 40079: f_value = s->p3_o2;  f_flag = 1; break;
-        case 40080: value = s->nox_cal_trig; break;
-        case 40081: value = s->nox_pt_sel; break;
-        case 40082: value = s->o2_cal_trig; break;
-        case 40083: value = s->o2_pt_sel; break;
-        case 40084: value = s->blow_interval; break;
-        case 40085: value = s->blow_duration; break;
-        case 40086: value = s->blow_status; break;
-        case 40087: value = s->blow_countdown; break;
-        case 40088: value = s->blow_cmd; break;
-        case 40051: case 40052: f_value = s->live_nox; f_flag = 1; break;
-        case 40053: case 40054: f_value = s->live_o2;  f_flag = 1; break;
-        case 40055: value = s->status; break;
+        /* S1 block 40014-40052 */
+        case 40014: value = s->power_on; break;
+        case 40015: case 40016: f_value = s->live_nox; f_flag = 1; break;
+        case 40017: case 40018: f_value = s->live_o2;  f_flag = 1; break;
+        case 40019: value = s->status; break;
+        case 40020: case 40021: f_value = s->seg1_nox_a; f_flag = 1; break;
+        case 40022: case 40023: f_value = s->seg1_nox_b; f_flag = 1; break;
+        case 40024: case 40025: f_value = s->seg1_o2_a;  f_flag = 1; break;
+        case 40026: case 40027: f_value = s->seg1_o2_b;  f_flag = 1; break;
+        case 40028: case 40029: f_value = s->seg2_nox_a; f_flag = 1; break;
+        case 40030: case 40031: f_value = s->seg2_nox_b; f_flag = 1; break;
+        case 40032: case 40033: f_value = s->seg2_o2_a;  f_flag = 1; break;
+        case 40034: case 40035: f_value = s->seg2_o2_b;  f_flag = 1; break;
+        case 40036: case 40037: f_value = s->p2_nox; f_flag = 1; break;
+        case 40038: case 40039: f_value = s->p2_o2;  f_flag = 1; break;
+        case 40040: case 40041: f_value = s->p3_nox; f_flag = 1; break;
+        case 40042: case 40043: f_value = s->p3_o2;  f_flag = 1; break;
+        case 40044: value = s->nox_pt_sel; break;
+        case 40045: value = s->nox_cal_trig; break;
+        case 40046: value = s->o2_cal_trig; break;
+        case 40047: value = s->o2_pt_sel; break;
+        case 40048: value = s->blow_interval; break;
+        case 40049: value = s->blow_duration; break;
+        case 40050: value = s->blow_status; break;
+        case 40051: value = s->blow_countdown; break;
+        case 40052: value = s->blow_cmd; break;
+        case 40053: value = s->valve_normal; break;
+        case 40054: value = s->valve_blow; break;
+        case 40055: value = s->valve_cal; break;
+        /* S2 block 40056-40097 */
+        case 40056: value = s->power_on; break;
+        case 40057: case 40058: f_value = s->live_nox; f_flag = 1; break;
+        case 40059: case 40060: f_value = s->live_o2;  f_flag = 1; break;
+        case 40061: value = s->status; break;
+        case 40062: case 40063: f_value = s->seg1_nox_a; f_flag = 1; break;
+        case 40064: case 40065: f_value = s->seg1_nox_b; f_flag = 1; break;
+        case 40066: case 40067: f_value = s->seg1_o2_a;  f_flag = 1; break;
+        case 40068: case 40069: f_value = s->seg1_o2_b;  f_flag = 1; break;
+        case 40070: case 40071: f_value = s->seg2_nox_a; f_flag = 1; break;
+        case 40072: case 40073: f_value = s->seg2_nox_b; f_flag = 1; break;
+        case 40074: case 40075: f_value = s->seg2_o2_a;  f_flag = 1; break;
+        case 40076: case 40077: f_value = s->seg2_o2_b;  f_flag = 1; break;
+        case 40078: case 40079: f_value = s->p2_nox; f_flag = 1; break;
+        case 40080: case 40081: f_value = s->p2_o2;  f_flag = 1; break;
+        case 40082: case 40083: f_value = s->p3_nox; f_flag = 1; break;
+        case 40084: case 40085: f_value = s->p3_o2;  f_flag = 1; break;
+        case 40086: value = s->nox_pt_sel; break;
+        case 40087: value = s->nox_cal_trig; break;
+        case 40088: value = s->o2_cal_trig; break;
+        case 40089: value = s->o2_pt_sel; break;
+        case 40090: value = s->blow_interval; break;
+        case 40091: value = s->blow_duration; break;
+        case 40092: value = s->blow_status; break;
+        case 40093: value = s->blow_countdown; break;
+        case 40094: value = s->blow_cmd; break;
+        case 40095: value = s->valve_normal; break;
+        case 40096: value = s->valve_blow; break;
+        case 40097: value = s->valve_cal; break;
+        /* S3 block 40098-40139 */
+        case 40098: value = s->power_on; break;
+        case 40099: case 40100: f_value = s->live_nox; f_flag = 1; break;
+        case 40101: case 40102: f_value = s->live_o2;  f_flag = 1; break;
+        case 40103: value = s->status; break;
+        case 40104: case 40105: f_value = s->seg1_nox_a; f_flag = 1; break;
+        case 40106: case 40107: f_value = s->seg1_nox_b; f_flag = 1; break;
+        case 40108: case 40109: f_value = s->seg1_o2_a;  f_flag = 1; break;
+        case 40110: case 40111: f_value = s->seg1_o2_b;  f_flag = 1; break;
+        case 40112: case 40113: f_value = s->seg2_nox_a; f_flag = 1; break;
+        case 40114: case 40115: f_value = s->seg2_nox_b; f_flag = 1; break;
+        case 40116: case 40117: f_value = s->seg2_o2_a;  f_flag = 1; break;
+        case 40118: case 40119: f_value = s->seg2_o2_b;  f_flag = 1; break;
+        case 40120: case 40121: f_value = s->p2_nox; f_flag = 1; break;
+        case 40122: case 40123: f_value = s->p2_o2;  f_flag = 1; break;
+        case 40124: case 40125: f_value = s->p3_nox; f_flag = 1; break;
+        case 40126: case 40127: f_value = s->p3_o2;  f_flag = 1; break;
+        case 40128: value = s->nox_pt_sel; break;
+        case 40129: value = s->nox_cal_trig; break;
+        case 40130: value = s->o2_cal_trig; break;
+        case 40131: value = s->o2_pt_sel; break;
+        case 40132: value = s->blow_interval; break;
+        case 40133: value = s->blow_duration; break;
+        case 40134: value = s->blow_status; break;
+        case 40135: value = s->blow_countdown; break;
+        case 40136: value = s->blow_cmd; break;
+        case 40137: value = s->valve_normal; break;
+        case 40138: value = s->valve_blow; break;
+        case 40139: value = s->valve_cal; break;
         default: UNLOCK_VAR(); return 0;
     }
     UNLOCK_VAR();
@@ -1040,11 +863,10 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
             case SLAVE_REG_MA_NOX:          g_tVar.ma_nox = value; break;
             case SLAVE_REG_MA_O2:           g_tVar.ma_o2 = value; break;
             case SLAVE_REG_WORK_MODE: {
-                /* Single (mode 0): store full word (high byte = channel). Mode 1/2: store low byte only
-                 * so Flash/active channel readback does not persist stale high byte. */
+                /* Mode 0: 0/256/512=ch0/ch1/ch2. Mode 1: 1/257/513=ch0/ch1/ch2 主. Mode 2: 2 only. */
                 uint8_t mode = (uint8_t)(value & 0xFFu);
-                if (mode == 0u)
-                    g_tVar.work_mode = value;
+                if (mode == 0u || mode == 1u)
+                    g_tVar.work_mode = (value & 0xFFu) | (value & 0x0300u);
                 else
                     g_tVar.work_mode = mode;
                 break;
@@ -1055,57 +877,110 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
         return f_flag ? 2 : 1;
     }
 
-    if (addr >= SENSOR_BASE_1 && addr <= SLAVE_REG_S1_BLOW_CMD)
+    if (addr >= SENSOR_BASE_1 && addr <= SLAVE_REG_S1_VALVE_CAL)
         s = &g_tVar.S1;
-    else if (addr >= SENSOR_BASE_2 && addr <= SLAVE_REG_S2_BLOW_CMD)
+    else if (addr >= SENSOR_BASE_2 && addr <= SLAVE_REG_S2_VALVE_CAL)
         s = &g_tVar.S2;
+    else if (addr >= SENSOR_BASE_3 && addr <= SLAVE_REG_S3_VALVE_CAL)
+        s = &g_tVar.S3;
     else
         return 0;
 
     LOCK_VAR();
     switch (addr) {
-        case 40013: case 40014: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40015: case 40016: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40018: case 40019: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40020: case 40021: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40022: case 40023: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40024: case 40025: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40026: case 40027: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40028: case 40029: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40030: case 40031: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40032: case 40033: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40034: case 40035: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40036: case 40037: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40038: case 40039: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40040: case 40041: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40042: s->nox_cal_trig = value; UNLOCK_VAR(); return 1;
-        case 40043: s->nox_pt_sel = value; UNLOCK_VAR(); return 1;
-        case 40044: s->o2_cal_trig = value; UNLOCK_VAR(); return 1;
-        case 40045: s->o2_pt_sel = value; UNLOCK_VAR(); return 1;
-        case 40046: s->blow_interval = value; UNLOCK_VAR(); return 1;
-        case 40047: s->blow_duration = value; UNLOCK_VAR(); return 1;
-        case 40050: s->blow_cmd = value; UNLOCK_VAR(); return 1;
-        case 40051: case 40052: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40053: case 40054: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40056: case 40057: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40058: case 40059: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40060: case 40061: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40062: case 40063: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40064: case 40065: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40066: case 40067: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40068: case 40069: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40070: case 40071: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40072: case 40073: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40074: case 40075: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40076: case 40077: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40078: case 40079: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
-        case 40080: s->nox_cal_trig = value; UNLOCK_VAR(); return 1;
-        case 40081: s->nox_pt_sel = value; UNLOCK_VAR(); return 1;
-        case 40082: s->o2_cal_trig = value; UNLOCK_VAR(); return 1;
-        case 40083: s->o2_pt_sel = value; UNLOCK_VAR(); return 1;
-        case 40084: s->blow_interval = value; UNLOCK_VAR(); return 1;
-        case 40085: s->blow_duration = value; UNLOCK_VAR(); return 1;
-        case 40088: s->blow_cmd = value; UNLOCK_VAR(); return 1;
+        /* S1 block 40014-40055 */
+        case 40014:
+            s->power_on = (value != 0u) ? 1u : 0u;
+#if SENSOR_POWER_GPIO_ENABLE
+            HAL_GPIO_WritePin(SENSOR_POWER0_GPIO_Port, SENSOR_POWER0_Pin, (s->power_on != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+#endif
+            UNLOCK_VAR(); return 1;
+        case 40015: case 40016: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40017: case 40018: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40020: case 40021: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40022: case 40023: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40024: case 40025: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40026: case 40027: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40028: case 40029: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40030: case 40031: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40032: case 40033: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40034: case 40035: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40036: case 40037: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40038: case 40039: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40040: case 40041: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40042: case 40043: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40044: s->nox_pt_sel = value; UNLOCK_VAR(); return 1;
+        case 40045: s->nox_cal_trig = value; UNLOCK_VAR(); return 1;
+        case 40046: s->o2_cal_trig = value; UNLOCK_VAR(); return 1;
+        case 40047: s->o2_pt_sel = value; UNLOCK_VAR(); return 1;
+        case 40048: s->blow_interval = value; UNLOCK_VAR(); return 1;
+        case 40049: s->blow_duration = value; UNLOCK_VAR(); return 1;
+        case 40052: s->blow_cmd = value; UNLOCK_VAR(); return 1;
+        case 40053: s->valve_normal = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(0, 0, s->valve_normal); return 1;
+        case 40054: s->valve_blow   = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(0, 1, s->valve_blow);   return 1;
+        case 40055: s->valve_cal    = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(0, 2, s->valve_cal);    return 1;
+        /* S2 block 40056-40097 */
+        case 40056:
+            s->power_on = (value != 0u) ? 1u : 0u;
+#if SENSOR_POWER_GPIO_ENABLE
+            HAL_GPIO_WritePin(SENSOR_POWER1_GPIO_Port, SENSOR_POWER1_Pin, (s->power_on != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+#endif
+            UNLOCK_VAR(); return 1;
+        case 40057: case 40058: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40059: case 40060: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40062: case 40063: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40064: case 40065: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40066: case 40067: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40068: case 40069: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40070: case 40071: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40072: case 40073: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40074: case 40075: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40076: case 40077: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40078: case 40079: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40080: case 40081: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40082: case 40083: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40084: case 40085: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40086: s->nox_pt_sel = value; UNLOCK_VAR(); return 1;
+        case 40087: s->nox_cal_trig = value; UNLOCK_VAR(); return 1;
+        case 40088: s->o2_cal_trig = value; UNLOCK_VAR(); return 1;
+        case 40089: s->o2_pt_sel = value; UNLOCK_VAR(); return 1;
+        case 40090: s->blow_interval = value; UNLOCK_VAR(); return 1;
+        case 40091: s->blow_duration = value; UNLOCK_VAR(); return 1;
+        case 40094: s->blow_cmd = value; UNLOCK_VAR(); return 1;
+        case 40095: s->valve_normal = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(1, 0, s->valve_normal); return 1;
+        case 40096: s->valve_blow   = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(1, 1, s->valve_blow);   return 1;
+        case 40097: s->valve_cal    = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(1, 2, s->valve_cal);    return 1;
+        /* S3 block 40098-40139 */
+        case 40098:
+            s->power_on = (value != 0u) ? 1u : 0u;
+#if SENSOR_POWER_GPIO_ENABLE
+            HAL_GPIO_WritePin(SENSOR_POWER2_GPIO_Port, SENSOR_POWER2_Pin, (s->power_on != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+#endif
+            UNLOCK_VAR(); return 1;
+        case 40099: case 40100: value1 = BEBufToUint16(reg_value + 2); s->live_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40101: case 40102: value1 = BEBufToUint16(reg_value + 2); s->live_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40104: case 40105: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40106: case 40107: value1 = BEBufToUint16(reg_value + 2); s->seg1_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40108: case 40109: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40110: case 40111: value1 = BEBufToUint16(reg_value + 2); s->seg1_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40112: case 40113: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_a = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40114: case 40115: value1 = BEBufToUint16(reg_value + 2); s->seg2_nox_b = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40116: case 40117: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_a  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40118: case 40119: value1 = BEBufToUint16(reg_value + 2); s->seg2_o2_b  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40120: case 40121: value1 = BEBufToUint16(reg_value + 2); s->p2_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40122: case 40123: value1 = BEBufToUint16(reg_value + 2); s->p2_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40124: case 40125: value1 = BEBufToUint16(reg_value + 2); s->p3_nox = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40126: case 40127: value1 = BEBufToUint16(reg_value + 2); s->p3_o2  = RegistersToFloat_BE(value, value1); UNLOCK_VAR(); return 2;
+        case 40128: s->nox_pt_sel = value; UNLOCK_VAR(); return 1;
+        case 40129: s->nox_cal_trig = value; UNLOCK_VAR(); return 1;
+        case 40130: s->o2_cal_trig = value; UNLOCK_VAR(); return 1;
+        case 40131: s->o2_pt_sel = value; UNLOCK_VAR(); return 1;
+        case 40132: s->blow_interval = value; UNLOCK_VAR(); return 1;
+        case 40133: s->blow_duration = value; UNLOCK_VAR(); return 1;
+        case 40136: s->blow_cmd = value; UNLOCK_VAR(); return 1;
+        case 40137: s->valve_normal = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(2, 0, s->valve_normal); return 1;
+        case 40138: s->valve_blow   = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(2, 1, s->valve_blow);   return 1;
+        case 40139: s->valve_cal    = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(2, 2, s->valve_cal);    return 1;
         default: UNLOCK_VAR(); return 0;
     }
 }
@@ -1146,11 +1021,25 @@ void Var_Write_MaO2(uint16_t value) { VAR_WRITE_U16(ma_o2, value); }
 uint16_t Var_Read_MaO2(void) { uint16_t r; VAR_READ_U16(ma_o2, r); return r; }
 void Var_Write_WorkMode(uint16_t value) { VAR_WRITE_U16(work_mode, value); }
 uint16_t Var_Read_WorkMode(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint16_t)(r & 0x03u); }
-uint8_t Var_Read_SingleChannelIndex(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint8_t)((r >> 8) & 1u); }
+uint8_t Var_Read_SingleChannelIndex(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint8_t)((r >> 8) & 3u); }
+uint8_t Var_Read_OutputSensorReg(void) { return NoxChannel_GetOutputSensorReg(); }
 
-// ========================== Sensor accessors by channel (ch=0 or 1) ==========================
-#define S(ch) ((ch) == 0 ? &g_tVar.S1 : &g_tVar.S2)
+// ========================== Sensor accessors by channel (ch=0, 1, or 2 for S1/S2/S3) ==========================
+#define S(ch) ((ch) == 0 ? &g_tVar.S1 : ((ch) == 1 ? &g_tVar.S2 : &g_tVar.S3))
 
+uint16_t Var_Read_SensorPowerOn(uint8_t ch) { uint16_t r; LOCK_VAR(); r = (ch <= 2u) ? S(ch)->power_on : 0u; UNLOCK_VAR(); return r; }
+void Var_Write_SensorPowerOn(uint8_t ch, uint16_t v) {
+    LOCK_VAR();
+    if (ch == 0u) { g_tVar.S1.power_on = (v != 0u) ? 1u : 0u; }
+    else if (ch == 1u) { g_tVar.S2.power_on = (v != 0u) ? 1u : 0u; }
+    else if (ch == 2u) { g_tVar.S3.power_on = (v != 0u) ? 1u : 0u; }
+    UNLOCK_VAR();
+#if SENSOR_POWER_GPIO_ENABLE
+    if (ch == 0u) HAL_GPIO_WritePin(SENSOR_POWER0_GPIO_Port, SENSOR_POWER0_Pin, (v != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    else if (ch == 1u) HAL_GPIO_WritePin(SENSOR_POWER1_GPIO_Port, SENSOR_POWER1_Pin, (v != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    else if (ch == 2u) HAL_GPIO_WritePin(SENSOR_POWER2_GPIO_Port, SENSOR_POWER2_Pin, (v != 0u) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+#endif
+}
 float Var_Read_SensorLiveNox(uint8_t ch) { float r; LOCK_VAR(); r = S(ch)->live_nox; UNLOCK_VAR(); return r; }
 float Var_Read_SensorLiveO2(uint8_t ch)  { float r; LOCK_VAR(); r = S(ch)->live_o2;  UNLOCK_VAR(); return r; }
 uint16_t Var_Read_SensorStatus(uint8_t ch) { uint16_t r; LOCK_VAR(); r = S(ch)->status; UNLOCK_VAR(); return r; }
@@ -1202,6 +1091,55 @@ uint16_t Var_Read_SensorBlowCmd(uint8_t ch)       { uint16_t r; LOCK_VAR(); r = 
 void Var_Write_SensorBlowInterval(uint8_t ch, uint16_t v)   { LOCK_VAR(); S(ch)->blow_interval = v;   UNLOCK_VAR(); }
 void Var_Write_SensorBlowDuration(uint8_t ch, uint16_t v)   { LOCK_VAR(); S(ch)->blow_duration = v;   UNLOCK_VAR(); }
 void Var_Write_SensorBlowCmd(uint8_t ch, uint16_t v)       { LOCK_VAR(); S(ch)->blow_cmd = v;       UNLOCK_VAR(); }
+
+/* 阀门 J1-J9：ch=0,1,2  v=0 正常 1 反吹 2 校准；写时驱动对应 GPIO */
+uint16_t Var_Read_SensorValve(uint8_t ch, uint8_t v) {
+    uint16_t r = 0;
+    if (ch > 2u || v > 2u) return 0;
+    LOCK_VAR();
+    if (v == 0u) r = S(ch)->valve_normal;
+    else if (v == 1u) r = S(ch)->valve_blow;
+    else r = S(ch)->valve_cal;
+    UNLOCK_VAR();
+    return r;
+}
+
+static void Valve_WriteGPIO(uint8_t ch, uint8_t v, uint8_t on) {
+    GPIO_PinState st = on ? GPIO_PIN_SET : GPIO_PIN_RESET;
+    if (ch == 0u) {
+        if (v == 0u) HAL_GPIO_WritePin(J1_IN_GPIO_Port, J1_IN_Pin, st);
+        else if (v == 1u) HAL_GPIO_WritePin(J2_IN_GPIO_Port, J2_IN_Pin, st);
+        else HAL_GPIO_WritePin(J3_IN_GPIO_Port, J3_IN_Pin, st);
+    } else if (ch == 1u) {
+        if (v == 0u) HAL_GPIO_WritePin(J4_IN_GPIO_Port, J4_IN_Pin, st);
+        else if (v == 1u) HAL_GPIO_WritePin(J5_IN_GPIO_Port, J5_IN_Pin, st);
+        else HAL_GPIO_WritePin(J6_IN_GPIO_Port, J6_IN_Pin, st);
+    } else {
+        if (v == 0u) HAL_GPIO_WritePin(J7_IN_GPIO_Port, J7_IN_Pin, st);
+        else if (v == 1u) HAL_GPIO_WritePin(J8_IN_GPIO_Port, J8_IN_Pin, st);
+        else HAL_GPIO_WritePin(J9_IN_GPIO_Port, J9_IN_Pin, st);
+    }
+}
+
+void Var_Write_SensorValve(uint8_t ch, uint8_t v, uint16_t value) {
+    if (ch > 2u || v > 2u) return;
+    uint8_t on = (value != 0u) ? 1u : 0u;
+    LOCK_VAR();
+    if (v == 0u) S(ch)->valve_normal = (uint16_t)on;
+    else if (v == 1u) S(ch)->valve_blow = (uint16_t)on;
+    else S(ch)->valve_cal = (uint16_t)on;
+    UNLOCK_VAR();
+    Valve_WriteGPIO(ch, v, on);
+}
+
+void Modbus_ApplySensorValveBlowToGPIO(uint8_t ch) {
+    if (ch > 2u) return;
+    uint16_t v;
+    LOCK_VAR();
+    v = (ch == 0u) ? g_tVar.S1.valve_blow : ((ch == 1u) ? g_tVar.S2.valve_blow : g_tVar.S3.valve_blow);
+    UNLOCK_VAR();
+    Valve_WriteGPIO(ch, 1, (v != 0u) ? 1u : 0u);
+}
 
 #undef S
 

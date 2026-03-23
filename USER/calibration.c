@@ -1,7 +1,7 @@
 /**
  * @file    calibration.c
  * @brief   NOx/O2 3-point calibration per channel. Each sensor has its own cal trigger/point select (no P53).
- *          Updates g_noxChannels[ch] and g_tVar S1/S2.
+ *          Updates g_noxChannels[ch] and g_tVar S1/S2/S3.
  */
 #include "calibration.h"
 #include "modbus_slave.h"
@@ -17,9 +17,11 @@ static uint8_t CalcSlopeIntercept(uint16_t *x, float *y, Parameter *p)
     return 1;
 }
 
-/* Sync channel params to g_tVar S1 or S2. */
+/* Sync channel params to g_tVar S1, S2, or S3. */
 static void SyncChannelToVar(uint8_t ch)
 {
+    if (ch >= 3u)
+        return;
     NoxChannel_t *c = &g_noxChannels[ch];
     Var_Write_SensorSeg1NoxA(ch, c->nox_low.a);
     Var_Write_SensorSeg1NoxB(ch, c->nox_low.b);

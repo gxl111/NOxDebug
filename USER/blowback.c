@@ -46,9 +46,10 @@ void BLOW_CONTROL(uint8_t ch, uint8_t state)
     BlowCh_t *sc = &s_ch[ch];
     /* Only one sensor may blow at a time (even in fusion mode). */
     if (state) {
-        uint8_t other = 1u - ch;
-        if (s_ch[other].blow_flag)
-            return;  /* Other channel is blowing, skip starting this one */
+        for (uint8_t k = 0; k < NOX_SENSOR_COUNT; k++) {
+            if (k != ch && s_ch[k].blow_flag)
+                return;  /* Another channel is blowing, skip starting this one */
+        }
         sc->blow_flag = 1;
         sc->blow_start_time_1s = time_1s;
         xTimerChangePeriod(sc->timer, pdMS_TO_TICKS((uint32_t)sc->blowtime * 1000u), portMAX_DELAY);
@@ -56,14 +57,16 @@ void BLOW_CONTROL(uint8_t ch, uint8_t state)
     } else {
         sc->blow_flag = 0;
     }
-    /* D01=normal1, D02=blow1 (ch0); D03=normal2, D04=blow2 (ch1) */
+    /* 阀门保持寄存器驱动 J1-J9；反吹时仅控制反吹阀 J2(ch0)/J5(ch1)/J8(ch2) */
     if (ch == 0) {
-        HAL_GPIO_WritePin(Relay0_GPIO_Port, Relay0_Pin, state ? GPIO_PIN_RESET : GPIO_PIN_SET);   /* D01: normal */
-        HAL_GPIO_WritePin(Relay1_GPIO_Port, Relay1_Pin, state ? GPIO_PIN_SET : GPIO_PIN_RESET);   /* D02: blowback */
+        HAL_GPIO_WritePin(J2_IN_GPIO_Port, J2_IN_Pin, state ? GPIO_PIN_SET : GPIO_PIN_RESET);   /* S1 反吹 */
+    } else if (ch == 1) {
+        HAL_GPIO_WritePin(J5_IN_GPIO_Port, J5_IN_Pin, state ? GPIO_PIN_SET : GPIO_PIN_RESET);   /* S2 反吹 */
     } else {
-        HAL_GPIO_WritePin(Relay2_GPIO_Port, Relay2_Pin, state ? GPIO_PIN_RESET : GPIO_PIN_SET);   /* D03: normal */
-        HAL_GPIO_WritePin(Relay3_GPIO_Port, Relay3_Pin, state ? GPIO_PIN_SET : GPIO_PIN_RESET);   /* D04: blowback */
+        HAL_GPIO_WritePin(J8_IN_GPIO_Port, J8_IN_Pin, state ? GPIO_PIN_SET : GPIO_PIN_RESET);   /* S3 反吹 */
     }
+    if (!state)
+        Modbus_ApplySensorValveBlowToGPIO(ch);   /* 反吹结束，将 valve_blow 寄存器写回 GPIO */
 }
 
 uint32_t Blowback_GetInterval(void) { return s_ch[0].blowspan; }
@@ -88,6 +91,18 @@ void Blowback_SetConfigCh1(uint32_t interval_s, uint32_t duration_s)
         s_ch[1].blowtime = BLOW_DURATION_MIN_S;
     if (s_ch[1].blowspan > 0u && s_ch[1].blowtime >= s_ch[1].blowspan)
         s_ch[1].blowtime = s_ch[1].blowspan - 1u;
+}
+
+uint32_t Blowback_GetIntervalCh2(void) { return s_ch[2].blowspan; }
+uint32_t Blowback_GetDurationCh2(void)  { return s_ch[2].blowtime; }
+void Blowback_SetConfigCh2(uint32_t interval_s, uint32_t duration_s)
+{
+    s_ch[2].blowspan = interval_s ? interval_s : DEFAULT_BLOW_INTERVAL;
+    s_ch[2].blowtime = duration_s ? duration_s : DEFAULT_BLOW_DURATION;
+    if (s_ch[2].blowtime < BLOW_DURATION_MIN_S)
+        s_ch[2].blowtime = BLOW_DURATION_MIN_S;
+    if (s_ch[2].blowspan > 0u && s_ch[2].blowtime >= s_ch[2].blowspan)
+        s_ch[2].blowtime = s_ch[2].blowspan - 1u;
 }
 
 void Blowback_Init(void)
@@ -116,7 +131,8 @@ static void Blowback_UpdateOne(uint8_t ch)
         sc->blow_end_pending = 0;
         LOCK_VAR();
         if (ch == 0) g_tVar.S1.blow_interval = (uint16_t)sc->blowspan;
-        else         g_tVar.S2.blow_interval = (uint16_t)sc->blowspan;
+        else if (ch == 1) g_tVar.S2.blow_interval = (uint16_t)sc->blowspan;
+        else g_tVar.S3.blow_interval = (uint16_t)sc->blowspan;
         UNLOCK_VAR();
     }
 
@@ -167,15 +183,20 @@ static void Blowback_UpdateOne(uint8_t ch)
 
     uint32_t tick = time_1s_blow;
     if (sc->blowspan != 0u && tick != 0u && !sc->blow_flag) {
-        /* Ch0: fire at tick % span == 0. Ch1: fire at tick % span == stagger (mod span) to offset ~5 min. */
+        /* Ch0: fire at 0. Ch1: fire at stagger. Ch2: fire at span*2/3 (no relay, timer/reg only). */
         uint8_t fire = 0u;
         if (ch == 0u) {
             if (tick % sc->blowspan == 0u)
                 fire = 1u;
-        } else {
+        } else if (ch == 1u) {
             uint32_t phase = BLOW_STAGGER_SEC % sc->blowspan;
             if (phase == 0u)
-                phase = sc->blowspan / 2u ? sc->blowspan / 2u : 1u; /* avoid same phase as ch0 */
+                phase = sc->blowspan / 2u ? sc->blowspan / 2u : 1u;
+            if ((tick % sc->blowspan) == phase)
+                fire = 1u;
+        } else {
+            uint32_t phase = (sc->blowspan * 2u) / 3u;
+            if (phase == 0u) phase = 1u;
             if ((tick % sc->blowspan) == phase)
                 fire = 1u;
         }
@@ -199,32 +220,34 @@ static void Blowback_UpdateOne(uint8_t ch)
                 cd = 0u; /* timer callback will clear valve shortly */
         } else if (sc->blowspan != 0u) {
             /* Idle: show seconds until next scheduled blow (interval phase) */
+            uint32_t span = sc->blowspan;
+            uint32_t r = tick % span;
             if (ch == 0u) {
-                /* Ch0 fires when tick % span == 0 */
-                uint32_t r = tick % sc->blowspan;
-                cd = (r == 0u) ? sc->blowspan : (sc->blowspan - r);
-            } else {
-                /* Ch1 fires when tick % span == phase (stagger) */
-                uint32_t span = sc->blowspan;
+                cd = (r == 0u) ? span : (span - r);
+            } else if (ch == 1u) {
                 uint32_t phase = BLOW_STAGGER_SEC % span;
-                if (phase == 0u)
-                    phase = span / 2u ? span / 2u : 1u;
-                uint32_t r = tick % span;
-                if (r < phase)
-                    cd = phase - r;
-                else if (r > phase)
-                    cd = span - r + phase;
-                else
-                    cd = span; /* at phase tick; if blocked by other ch, next cycle */
+                if (phase == 0u) phase = span / 2u ? span / 2u : 1u;
+                if (r < phase) cd = phase - r;
+                else if (r > phase) cd = span - r + phase;
+                else cd = span;
+            } else {
+                uint32_t phase = (span * 2u) / 3u;
+                if (phase == 0u) phase = 1u;
+                if (r < phase) cd = phase - r;
+                else if (r > phase) cd = span - r + phase;
+                else cd = span;
             }
         }
         LOCK_VAR();
         if (ch == 0) {
             g_tVar.S1.blow_status = sc->blow_flag ? 1u : 0u;
             g_tVar.S1.blow_countdown = (uint16_t)(cd > 65535u ? 65535u : cd);
-        } else {
+        } else if (ch == 1) {
             g_tVar.S2.blow_status = sc->blow_flag ? 1u : 0u;
             g_tVar.S2.blow_countdown = (uint16_t)(cd > 65535u ? 65535u : cd);
+        } else {
+            g_tVar.S3.blow_status = sc->blow_flag ? 1u : 0u;
+            g_tVar.S3.blow_countdown = (uint16_t)(cd > 65535u ? 65535u : cd);
         }
         UNLOCK_VAR();
     }
@@ -234,4 +257,5 @@ void Blowback_Update(void)
 {
     Blowback_UpdateOne(0);
     Blowback_UpdateOne(1);
+    Blowback_UpdateOne(2);
 }

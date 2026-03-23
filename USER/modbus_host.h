@@ -56,7 +56,7 @@ typedef struct
 }VAR_T_H;
 
 extern VAR_T_H g_tVar_h;
-//????????????
+/* 4-20 mA module register values (NOx/O2 codes), filled by NOx task */
 extern uint8_t electricity_data_buf[4];
 
 extern SemaphoreHandle_t RS485send_SemaphoreHandle;

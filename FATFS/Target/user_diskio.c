@@ -35,7 +35,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include <string.h>
 #include "ff_gen_drv.h"
-//���ͷ�ļ�
+//??
 #include "diskio.h"		/* Declarations of disk functions */
 #include "sdcard.h"
 
@@ -86,14 +86,14 @@ DSTATUS USER_initialize (
   /* USER CODE BEGIN INIT */
   uint8_t res;
 	res = SD_init();	//SD_Initialize() 
-	if(res)//STM32 SPI��bug,��sd������ʧ�ܵ�ʱ�������ִ����������,���ܵ���SPI��д�쳣
+	if(res)//STM32 SPIbug,sd????,?SPI��?
 	{
 		SPI_setspeed(SPI_BAUDRATEPRESCALER_256);
-		spi_readwrite(0xff);//�ṩ�����8��ʱ��
+		spi_readwrite(0xff);//?8?
 		SPI_setspeed(SPI_BAUDRATEPRESCALER_2);
 	}
 	if(res)	return STA_NOINIT;
-	else return RES_OK; //��ʼ���ɹ�
+	else return RES_OK; //??
   /* USER CODE END INIT */
 }
 
@@ -140,7 +140,7 @@ DRESULT USER_read (
   uint8_t res;
 	if(!count)
 	{    
-		return RES_PARERR;  /* count���ܵ���0�����򷵻ز������� */
+		return RES_PARERR;  /* count?0?? */
 	}
 	switch (pdrv)
 	{
@@ -181,7 +181,7 @@ DRESULT USER_write (
   uint8_t  res;
 	if( !count )
 	{    
-		return RES_PARERR;  /* count���ܵ���0�����򷵻ز������� */
+		return RES_PARERR;  /* count?0?? */
 	}
 	switch (pdrv)
 	{

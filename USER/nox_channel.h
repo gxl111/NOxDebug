@@ -39,12 +39,12 @@ void NoxChannel_Init(void);
  * Update channel from one J1939 8-byte payload (NOx_raw, O2_raw, status, heater, FMI).
  * Fills raw, ppm, pct, state, valid for the given channel.
  *
- * CAN 载荷字节序（表 4.1.1）:
+ * CAN payload layout (table 4.1.1):
  *   data[0..1] NOx_raw, data[2..3] O2_raw,
- *   data[4]    Status Byte — 8 位按 2-bit 一组，非逐 bit 独立含义：
- *              Bit1..0 电压在范围内, Bit3..2 传感器达温,
- *              Bit5..4 NOx 读值稳定, Bit7..6 O2 读值稳定；每组 01=有效/在范围内等，00/10/11 见 nox_channel.c 注释。
- *   data[5]    Heater Byte, data[6] Error NOx, data[7] Error O2（FMI 低 5 位）。
+ *   data[4]    Status Byte — four 2-bit fields (not single-bit flags):
+ *              Bit1..0 power in range, Bit3..2 sensor at temp,
+ *              Bit5..4 NOx stable, Bit7..6 O2 stable; 01 = valid, see nox_channel.c block comment.
+ *   data[5]    Heater Byte, data[6] Error NOx, data[7] Error O2 (FMI in low 5 bits).
  */
 void NoxChannel_UpdateFromCan(uint8_t ch_index, const uint8_t *data);
 
@@ -54,20 +54,31 @@ uint8_t NoxChannel_IsValid(uint8_t ch_index);
 /** Set work mode (called from NOx.c after reading P34). */
 void NoxChannel_SetWorkMode(NoxWorkMode_t mode);
 
-/** Set single-channel index (0 or 1). Only used when work mode is SINGLE. */
+/** Set single-channel index (0 or 1). Mode 0 = which channel; mode 1 = 主 channel for primary-backup. */
 void NoxChannel_SetSingleChannelIndex(uint8_t ch_index);
 
 /**
  * Compute current output from all channels according to current work mode.
  * Single: ch0 only; Primary_backup: first valid; Fusion: average of valid.
- * Writes to *nox_ppm, *o2_pct (used as O₂ in Modbus P02/sensor blocks), *state for P01/P02/P07 and 4-20mA.
+ * Writes to *nox_ppm, *o2_pct (used as O2 in Modbus P02/sensor blocks), *state for P01/P02/P07 and 4-20mA.
  */
 void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state);
 
 /**
  * Channel currently driving the combined output (updated each strategy cycle).
- * 0 = sensor 1 (SA 0x52), 1 = sensor 2 (SA 0x51), 2 = fusion (averaging both).
+ * 0 = sensor 1 (SA 0x52), 1 = sensor 2 (SA 0x51), 2 = fusion average applied.
  */
 uint8_t NoxChannel_GetActiveOutputChannel(void);
+
+/**
+ * High byte for P34 readback: 0=S1, 1=S2, 2=fusion, 0xFF=fault (no valid path).
+ */
+uint8_t NoxChannel_GetWorkModeReadbackHighByte(void);
+
+/**
+ * Output sensor register (P35, read-only): 0b01 = sensor0 output, 0b10 = sensor1 output,
+ * 0b11 = fusion (both), 0b00 = fault (no valid path).
+ */
+uint8_t NoxChannel_GetOutputSensorReg(void);
 
 #endif /* __NOX_CHANNEL_H */
