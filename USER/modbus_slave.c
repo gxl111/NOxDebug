@@ -103,7 +103,6 @@ void MODS_Poll(void)
 {
     uint16_t addr;
     uint16_t crc1;
-    uint8_t frame_len;
     uint8_t pending_len = 0;
     uint8_t pending_save[S_RX_BUF_SIZE];
 
@@ -118,28 +117,23 @@ void MODS_Poll(void)
         if (pending_len > 0U)
             (void)memcpy(pending_save, g_tModS.RxBuf, (size_t)pending_len);
 
-        frame_len = g_tModS.RxFrameLen;
-        if (frame_len > S_RX_BUF_SIZE)
-            frame_len = S_RX_BUF_SIZE;
-        if (frame_len > 0U)
-            (void)memcpy(g_tModS.RxBuf, g_tModS.RxFrameSnap, (size_t)frame_len);
-        g_tModS.RxCount = frame_len;
+        /* 已完成帧只在 RxFrameSnap；RxBuf 留给 ISR 继续收下一帧（pending 已拷到栈上） */
         NVIC_EnableIRQ(USART1_IRQn);
 
-        if (g_tModS.RxCount < 4)				/* need at least 4 bytes: addr+func+reg */
+        if (g_tModS.RxFrameLen < 4)				/* need at least 4 bytes: addr+func+reg */
         {
             goto err_ret;
         }
 
-        /* CRC16 over frame; result 0 means valid */
-        crc1 = CRC16_Modbus(g_tModS.RxBuf, g_tModS.RxCount);
+        /* CRC16 over frame; result 0 means valid（长度以快照 RxFrameLen 为准） */
+        crc1 = CRC16_Modbus(g_tModS.RxFrameSnap, g_tModS.RxFrameLen);
         if (crc1 != 0)
         {
             goto err_ret;
         }
 
         /* slave address check */
-        addr = g_tModS.RxBuf[0];				/* byte 1: address */
+        addr = g_tModS.RxFrameSnap[0];				/* byte 1: address */
         if (addr != SADDR485)		 			/* not for us */
         {
             goto err_ret;
@@ -303,8 +297,11 @@ static void MODS_SendAckErr(uint8_t _ucErrCode)
 {
     uint8_t txbuf[3];
 
-    txbuf[0] = g_tModS.RxBuf[0];					/* echo slave addr */
-    txbuf[1] = g_tModS.RxBuf[1] | 0x80;				/* set MSB for error */
+    if (g_tModS.RxFrameLen < 2)
+        return;
+
+    txbuf[0] = g_tModS.RxFrameSnap[0];					/* echo slave addr */
+    txbuf[1] = g_tModS.RxFrameSnap[1] | 0x80;				/* set MSB for error */
     txbuf[2] = _ucErrCode;							/* exception code (01,02,03,04) */
 
     MODS_SendWithCRC(txbuf, 3);
@@ -321,9 +318,12 @@ static void MODS_SendAckOk(void)
     uint8_t txbuf[6];
     uint8_t i;
 
+    if (g_tModS.RxFrameLen < 6)
+        return;
+
     for (i = 0; i < 6; i++)
     {
-        txbuf[i] = g_tModS.RxBuf[i];
+        txbuf[i] = g_tModS.RxFrameSnap[i];
     }
     
     MODS_SendWithCRC(txbuf, 6);
@@ -338,7 +338,7 @@ static void MODS_SendAckOk(void)
 static void MODS_AnalyzeApp(void)
 {
     //LCD_ShowString(30,400,210,24,24,"modbus_analyzing");
-    switch (g_tModS.RxBuf[1])				/* byte 2: function code */
+    switch (g_tModS.RxFrameSnap[1])				/* byte 2: function code */
     {
     case 0x01:							/* read coils */
         MODS_01H();
@@ -389,15 +389,15 @@ static void MODS_01H(void)
     g_tModS.RspCode = RSP_OK;
 
     /* Step 1: fixed 8-byte request for 01H */
-    if (g_tModS.RxCount != 8)
+    if (g_tModS.RxFrameLen != 8)
     {
         g_tModS.RspCode = RSP_ERR_VALUE;
         return;
     }
 
     /* Step 2: parse start address and quantity */
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]);
-    num = BEBufToUint16(&g_tModS.RxBuf[4]);
+    reg = BEBufToUint16(&g_tModS.RxFrameSnap[2]);
+    num = BEBufToUint16(&g_tModS.RxFrameSnap[4]);
 
     m = (num + 7) / 8;   /* response data bytes */
 
@@ -432,8 +432,8 @@ static void MODS_01H(void)
     if (g_tModS.RspCode == RSP_OK)
     {
         g_tModS.TxCount = 0;
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[0];
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[1];
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxFrameSnap[0];
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxFrameSnap[1];
         g_tModS.TxBuf[g_tModS.TxCount++] = m;
 
         for (i = 0; i < m; i++)
@@ -465,7 +465,7 @@ static void MODS_03H(void)
 
     g_tModS.RspCode = RSP_OK;
 
-    if (g_tModS.RxCount != 8)
+    if (g_tModS.RxFrameLen != 8)
     {
         g_tModS.RspCode = RSP_ERR_VALUE;
         goto err_ret;
@@ -473,8 +473,8 @@ static void MODS_03H(void)
 
     /* Step 2: parse request */
     
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 				
-    num = BEBufToUint16(&g_tModS.RxBuf[4]);					
+    reg = BEBufToUint16(&g_tModS.RxFrameSnap[2]); 				
+    num = BEBufToUint16(&g_tModS.RxFrameSnap[4]);					
 
     
     //
@@ -512,8 +512,8 @@ err_ret:
     if (g_tModS.RspCode == RSP_OK)							 
     {
         g_tModS.TxCount = 0;
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[0]; 
-        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxBuf[1]; 
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxFrameSnap[0]; 
+        g_tModS.TxBuf[g_tModS.TxCount++] = g_tModS.RxFrameSnap[1]; 
 
         g_tModS.TxBuf[g_tModS.TxCount++] =num * 2;			 
       
@@ -550,7 +550,7 @@ static void MODS_05H(void)
 
     /* Step 1: validate frame length */
     
-    if (g_tModS.RxCount != 8)
+    if (g_tModS.RxFrameLen != 8)
     {
         g_tModS.RspCode = RSP_ERR_VALUE;		
         goto err_ret;
@@ -558,8 +558,8 @@ static void MODS_05H(void)
 
     /* Step 2: parse request */
     
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 	
-    value = BEBufToUint16(&g_tModS.RxBuf[4]);	
+    reg = BEBufToUint16(&g_tModS.RxFrameSnap[2]); 	
+    value = BEBufToUint16(&g_tModS.RxFrameSnap[4]);	
 
     if (value != 0x0000 && value != 0xFF00)
     {
@@ -613,7 +613,7 @@ static void MODS_06H(void)
 
     /* Step 1: validate frame length */
     
-    if (g_tModS.RxCount != 8)
+    if (g_tModS.RxFrameLen != 8)
     {
         g_tModS.RspCode = RSP_ERR_VALUE;		
         goto err_ret;
@@ -621,10 +621,10 @@ static void MODS_06H(void)
 
     /* Step 2: parse request */
     
-    reg = BEBufToUint16(&g_tModS.RxBuf[2]); 	
+    reg = BEBufToUint16(&g_tModS.RxFrameSnap[2]); 	
 
     
-    write_state = MODS_WriteRegValue(reg, &g_tModS.RxBuf[4]);
+    write_state = MODS_WriteRegValue(reg, &g_tModS.RxFrameSnap[4]);
     
     if (write_state!=0)	
     {
@@ -666,9 +666,8 @@ static void MODS_10H(void)
 
     g_tModS.RspCode = RSP_OK;
 
-    /* Step 1: validate frame length */
-    
-    if (g_tModS.RxCount < 11)
+    /* Step 1: 固定头 7 字节 + 数据 byte_num + CRC 2 字节；先保证能读到 ByteCount */
+    if (g_tModS.RxFrameLen < 7)
     {
         g_tModS.RspCode = RSP_ERR_VALUE;			
         goto err_ret;
@@ -676,9 +675,9 @@ static void MODS_10H(void)
 
     /* Step 2: parse request */
     
-    reg_addr = BEBufToUint16(&g_tModS.RxBuf[2]); 	
-    reg_num = BEBufToUint16(&g_tModS.RxBuf[4]);		
-    byte_num = g_tModS.RxBuf[6];					
+    reg_addr = BEBufToUint16(&g_tModS.RxFrameSnap[2]); 	
+    reg_num = BEBufToUint16(&g_tModS.RxFrameSnap[4]);		
+    byte_num = g_tModS.RxFrameSnap[6];					
 
     
     if (byte_num != 2 * reg_num)
@@ -686,7 +685,15 @@ static void MODS_10H(void)
         g_tModS.RspCode = RSP_ERR_VALUE;			
         goto err_ret;
     }
-    
+
+    {
+        uint16_t expect_len = (uint16_t)(9u + (uint16_t)byte_num);
+        if ((uint16_t)g_tModS.RxFrameLen != expect_len)
+        {
+            g_tModS.RspCode = RSP_ERR_VALUE;
+            goto err_ret;
+        }
+    }
     
     
     for (i = 0; i < reg_num; i++)
@@ -694,7 +701,7 @@ static void MODS_10H(void)
         
 
         
-        uint8_t write_state=MODS_WriteRegValue(reg_addr, &g_tModS.RxBuf[7 + 2 * i]);
+        uint8_t write_state=MODS_WriteRegValue(reg_addr, &g_tModS.RxFrameSnap[7 + 2 * i]);
         if (write_state == 2)
         {
             ++i;
