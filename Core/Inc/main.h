@@ -79,20 +79,30 @@ void Error_Handler(void);
 #define REMOTE_CRT_GPIO_Port GPIOC
 #define SD_CS_Pin GPIO_PIN_8
 #define SD_CS_GPIO_Port GPIOC
-#define Relay3_Pin GPIO_PIN_3
-#define Relay3_GPIO_Port GPIOB
-#define Relay2_Pin GPIO_PIN_4
-#define Relay2_GPIO_Port GPIOB
-#define J2_IN_Pin GPIO_PIN_5
-#define J2_IN_GPIO_Port GPIOB
 #define OLED_SCL_Pin GPIO_PIN_6
 #define OLED_SCL_GPIO_Port GPIOB
 #define OLED_SDA_Pin GPIO_PIN_7
 #define OLED_SDA_GPIO_Port GPIOB
-#define Relay1_Pin GPIO_PIN_8
-#define Relay1_GPIO_Port GPIOB
-#define Relay0_Pin GPIO_PIN_9
-#define Relay0_GPIO_Port GPIOB
+
+/* 阀门继电器 J1-J9：每传感器 3 个（正常抽气检测、反吹、校准），保持寄存器控制 */
+#define J1_IN_Pin   GPIO_PIN_4
+#define J1_IN_GPIO_Port  GPIOA   /* S1 正常抽气 */
+#define J2_IN_Pin   GPIO_PIN_3
+#define J2_IN_GPIO_Port  GPIOA   /* S1 反吹 */
+#define J3_IN_Pin   GPIO_PIN_1
+#define J3_IN_GPIO_Port  GPIOA   /* S1 校准 */
+#define J4_IN_Pin   GPIO_PIN_0
+#define J4_IN_GPIO_Port  GPIOA   /* S2 正常抽气 */
+#define J5_IN_Pin   GPIO_PIN_3
+#define J5_IN_GPIO_Port  GPIOC   /* S2 反吹 */
+#define J6_IN_Pin   GPIO_PIN_3
+#define J6_IN_GPIO_Port  GPIOB   /* S2 校准 */
+#define J7_IN_Pin   GPIO_PIN_4
+#define J7_IN_GPIO_Port  GPIOB   /* S3 正常抽气 */
+#define J8_IN_Pin   GPIO_PIN_5
+#define J8_IN_GPIO_Port  GPIOB   /* S3 反吹 */
+#define J9_IN_Pin   GPIO_PIN_8
+#define J9_IN_GPIO_Port  GPIOB   /* S3 校准 */
 
 /* USER CODE BEGIN Private defines */
 /* MCP2515 SPI-CAN: CS=PC10, INT=PC11 (SPI2: PB13 SCK, PB14 MISO, PB15 MOSI) */
@@ -100,11 +110,13 @@ void Error_Handler(void);
 #define MCP2515_CS_GPIO_Port  GPIOC
 #define MCP2515_INT_Pin       GPIO_PIN_11
 #define MCP2515_INT_GPIO_Port GPIOC
-/* Reserved: sensor power control GPIO (used when SENSOR_POWER_GPIO_ENABLE=1 in app_config.h). Not yet assigned. */
+/* Sensor power control GPIO (SENSOR_POWER_GPIO_ENABLE=1 in app_config.h): S1=PC0, S2=PC13, S3=PB9 */
 #define SENSOR_POWER0_Pin       GPIO_PIN_0
-#define SENSOR_POWER0_GPIO_Port GPIOA
-#define SENSOR_POWER1_Pin       GPIO_PIN_1
-#define SENSOR_POWER1_GPIO_Port GPIOA
+#define SENSOR_POWER0_GPIO_Port GPIOC
+#define SENSOR_POWER1_Pin       GPIO_PIN_13
+#define SENSOR_POWER1_GPIO_Port GPIOC
+#define SENSOR_POWER2_Pin       GPIO_PIN_9
+#define SENSOR_POWER2_GPIO_Port GPIOB
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

@@ -92,6 +92,7 @@ static const uint8_t *const cnf_tables[] = {
 };
 
 static SPI_HandleTypeDef *s_spi = &hspi2;
+static bool s_mcp2515_ready = false;
 
 /* 在模块内初始化 MCP2515 所用 GPIO：CS=PC10 输出，INT=PC11 输入 */
 static void mcp2515_gpio_init(void)
@@ -227,7 +228,13 @@ int MCP2515_Init(MCP2515_Baud_t baud)
 
 	mcp2515_set_normal();
 	HAL_Delay(1);
+	s_mcp2515_ready = true;
 	return 0;
+}
+
+bool MCP2515_IsReady(void)
+{
+	return s_mcp2515_ready;
 }
 
 int MCP2515_Send(const MCP2515_CAN_Frame_t *frame)

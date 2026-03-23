@@ -31,4 +31,9 @@ uint32_t Blowback_GetIntervalCh1(void);
 uint32_t Blowback_GetDurationCh1(void);
 void Blowback_SetConfigCh1(uint32_t interval_s, uint32_t duration_s);
 
+/* Channel 2 config (S3, second CAN; no relay, register only). */
+uint32_t Blowback_GetIntervalCh2(void);
+uint32_t Blowback_GetDurationCh2(void);
+void Blowback_SetConfigCh2(uint32_t interval_s, uint32_t duration_s);
+
 #endif /* __BLOWBACK_H */

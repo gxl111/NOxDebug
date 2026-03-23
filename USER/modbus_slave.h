@@ -44,14 +44,14 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_OUTPUT_SENSOR   40013   /* P35 R-only: 0b01=S0, 0b10=S1, 0b11=fusion, 0b00=fault */
 #define COMMON_REG_END            40013   /* End address of common block */
 
-/* ==================== Per-sensor registers (same layout each, 38 regs per channel) ==================== */
-/* Layout order: power_on | live NOx, live O2, status | seg1/seg2/P2/P3 | cal/blow ... */
+/* ==================== Per-sensor registers (same layout each, 39 + 3 valve regs = 42 per channel) ==================== */
+/* Layout: power_on | live NOx/O2/status | seg1/seg2/P2/P3 | cal/blow | valve_normal, valve_blow, valve_cal */
 #define SENSOR_BASE_1    40014
-#define SENSOR_BASE_2    40053
-#define SENSOR_REG_COUNT 39
+#define SENSOR_BASE_2    40056
+#define SENSOR_REG_COUNT 42
 
-/* Sensor channel 1 addresses (40014-40051), first reg = power on (R/W, GPIO control reserved) */
-#define SLAVE_REG_S1_POWER        40014   /* R/W: 0=off 1=on, drives reserved GPIO when defined */
+/* Sensor channel 1 (40014-40055): 39 + 3 valve (J1=正常抽气,J2=反吹,J3=校准) */
+#define SLAVE_REG_S1_POWER        40014
 #define SLAVE_REG_S1_LIVE_NOX    40015
 #define SLAVE_REG_S1_LIVE_O2     40017
 #define SLAVE_REG_S1_STATUS      40019
@@ -67,42 +67,79 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_S1_P2_O2       40038
 #define SLAVE_REG_S1_P3_NOX      40040
 #define SLAVE_REG_S1_P3_O2       40042
-#define SLAVE_REG_S1_NOX_CAL_TRIG 40044
-#define SLAVE_REG_S1_NOX_PT_SEL  40045
+#define SLAVE_REG_S1_NOX_PT_SEL  40044   /* NOx 点选择（0/1/2） */
+#define SLAVE_REG_S1_NOX_CAL_TRIG 40045  /* NOx 标定触发 */
 #define SLAVE_REG_S1_O2_CAL_TRIG  40046
 #define SLAVE_REG_S1_O2_PT_SEL    40047
 #define SLAVE_REG_S1_BLOW_INT    40048
 #define SLAVE_REG_S1_BLOW_DUR    40049
 #define SLAVE_REG_S1_BLOW_STATUS 40050
-#define SLAVE_REG_S1_BLOW_CD     40051   /* R: idle=sec to next blow; blowing=sec left */
-#define SLAVE_REG_S1_BLOW_CMD    40052   /* 40014-40052 = 39 regs S1 */
+#define SLAVE_REG_S1_BLOW_CD     40051
+#define SLAVE_REG_S1_BLOW_CMD    40052
+#define SLAVE_REG_S1_VALVE_NORMAL 40053   /* R/W: 0=关 1=开, J1_IN(PA4) 正常抽气检测 */
+#define SLAVE_REG_S1_VALVE_BLOW   40054   /* R/W: 0=关 1=开, J2_IN(PA3) 反吹；反吹任务会覆盖 */
+#define SLAVE_REG_S1_VALVE_CAL    40055   /* R/W: 0=关 1=开, J3_IN(PA1) 校准 */
 
-/* Sensor channel 2 addresses (40053-40091), same layout as channel 1 */
-#define SLAVE_REG_S2_POWER        40053
-#define SLAVE_REG_S2_LIVE_NOX    40054
-#define SLAVE_REG_S2_LIVE_O2     40056
-#define SLAVE_REG_S2_STATUS      40058
-#define SLAVE_REG_S2_SEG1_NOX_A  40059
-#define SLAVE_REG_S2_SEG1_NOX_B  40061
-#define SLAVE_REG_S2_SEG1_O2_A   40063
-#define SLAVE_REG_S2_SEG1_O2_B   40065
-#define SLAVE_REG_S2_SEG2_NOX_A  40067
-#define SLAVE_REG_S2_SEG2_NOX_B  40069
-#define SLAVE_REG_S2_SEG2_O2_A   40071
-#define SLAVE_REG_S2_SEG2_O2_B   40073
-#define SLAVE_REG_S2_P2_NOX      40075
-#define SLAVE_REG_S2_P2_O2       40077
-#define SLAVE_REG_S2_P3_NOX      40079
-#define SLAVE_REG_S2_P3_O2       40081
-#define SLAVE_REG_S2_NOX_CAL_TRIG 40083
-#define SLAVE_REG_S2_NOX_PT_SEL  40084
-#define SLAVE_REG_S2_O2_CAL_TRIG  40085
-#define SLAVE_REG_S2_O2_PT_SEL    40086
-#define SLAVE_REG_S2_BLOW_INT    40087
-#define SLAVE_REG_S2_BLOW_DUR    40088
-#define SLAVE_REG_S2_BLOW_STATUS 40089
-#define SLAVE_REG_S2_BLOW_CD     40090   /* R: idle=sec to next blow; blowing=sec left */
-#define SLAVE_REG_S2_BLOW_CMD    40091   /* 40053-40091 = 39 regs S2 */
+/* Sensor channel 2 (40056-40097), same layout + 3 valve (J4,J5,J6) */
+#define SLAVE_REG_S2_POWER        40056
+#define SLAVE_REG_S2_LIVE_NOX    40057
+#define SLAVE_REG_S2_LIVE_O2     40059
+#define SLAVE_REG_S2_STATUS      40061
+#define SLAVE_REG_S2_SEG1_NOX_A  40062
+#define SLAVE_REG_S2_SEG1_NOX_B  40064
+#define SLAVE_REG_S2_SEG1_O2_A   40066
+#define SLAVE_REG_S2_SEG1_O2_B   40068
+#define SLAVE_REG_S2_SEG2_NOX_A  40070
+#define SLAVE_REG_S2_SEG2_NOX_B  40072
+#define SLAVE_REG_S2_SEG2_O2_A   40074
+#define SLAVE_REG_S2_SEG2_O2_B   40076
+#define SLAVE_REG_S2_P2_NOX      40078
+#define SLAVE_REG_S2_P2_O2       40080
+#define SLAVE_REG_S2_P3_NOX      40082
+#define SLAVE_REG_S2_P3_O2       40084
+#define SLAVE_REG_S2_NOX_PT_SEL  40086   /* NOx 点选择（0/1/2） */
+#define SLAVE_REG_S2_NOX_CAL_TRIG 40087  /* NOx 标定触发 */
+#define SLAVE_REG_S2_O2_CAL_TRIG  40088
+#define SLAVE_REG_S2_O2_PT_SEL    40089
+#define SLAVE_REG_S2_BLOW_INT    40090
+#define SLAVE_REG_S2_BLOW_DUR    40091
+#define SLAVE_REG_S2_BLOW_STATUS 40092
+#define SLAVE_REG_S2_BLOW_CD     40093
+#define SLAVE_REG_S2_BLOW_CMD    40094
+#define SLAVE_REG_S2_VALVE_NORMAL 40095   /* J4_IN(PA0) */
+#define SLAVE_REG_S2_VALVE_BLOW   40096   /* J5_IN(PC3) */
+#define SLAVE_REG_S2_VALVE_CAL    40097   /* J6_IN(PB3) */
+
+/* Sensor channel 3 (40098-40139), same layout + 3 valve (J7,J8,J9) */
+#define SENSOR_BASE_3      40098
+#define SLAVE_REG_S3_POWER        40098
+#define SLAVE_REG_S3_LIVE_NOX    40099
+#define SLAVE_REG_S3_LIVE_O2     40101
+#define SLAVE_REG_S3_STATUS      40103
+#define SLAVE_REG_S3_SEG1_NOX_A  40104
+#define SLAVE_REG_S3_SEG1_NOX_B  40106
+#define SLAVE_REG_S3_SEG1_O2_A   40108
+#define SLAVE_REG_S3_SEG1_O2_B   40110
+#define SLAVE_REG_S3_SEG2_NOX_A  40112
+#define SLAVE_REG_S3_SEG2_NOX_B  40114
+#define SLAVE_REG_S3_SEG2_O2_A   40116
+#define SLAVE_REG_S3_SEG2_O2_B   40118
+#define SLAVE_REG_S3_P2_NOX      40120
+#define SLAVE_REG_S3_P2_O2       40122
+#define SLAVE_REG_S3_P3_NOX      40124
+#define SLAVE_REG_S3_P3_O2       40126
+#define SLAVE_REG_S3_NOX_PT_SEL  40128   /* NOx 点选择（0/1/2） */
+#define SLAVE_REG_S3_NOX_CAL_TRIG 40129  /* NOx 标定触发 */
+#define SLAVE_REG_S3_O2_CAL_TRIG  40130
+#define SLAVE_REG_S3_O2_PT_SEL    40131
+#define SLAVE_REG_S3_BLOW_INT    40132
+#define SLAVE_REG_S3_BLOW_DUR    40133
+#define SLAVE_REG_S3_BLOW_STATUS 40134
+#define SLAVE_REG_S3_BLOW_CD     40135
+#define SLAVE_REG_S3_BLOW_CMD    40136
+#define SLAVE_REG_S3_VALVE_NORMAL 40137   /* J7_IN(PB4) */
+#define SLAVE_REG_S3_VALVE_BLOW   40138   /* J8_IN(PB5) */
+#define SLAVE_REG_S3_VALVE_CAL    40139   /* J9_IN(PB8) */
 
 #define RSP_OK              0
 #define RSP_ERR_CMD         0x01
@@ -122,9 +159,9 @@ typedef struct {
     uint8_t TxCount;
 } MODS_T;
 
-/* Per-channel sensor register mirror (same struct for S1 and S2) */
+/* Per-channel sensor register mirror (same struct for S1/S2/S3) */
 typedef struct {
-    uint16_t power_on;   /* 0=off 1=on, drives reserved sensor power GPIO when defined */
+    uint16_t power_on;
     float    live_nox, live_o2;
     uint16_t status;
     float    seg1_nox_a, seg1_nox_b, seg1_o2_a, seg1_o2_b;
@@ -132,6 +169,7 @@ typedef struct {
     float    p2_nox, p2_o2, p3_nox, p3_o2;
     uint16_t nox_cal_trig, nox_pt_sel, o2_cal_trig, o2_pt_sel;
     uint16_t blow_interval, blow_duration, blow_status, blow_countdown, blow_cmd;
+    uint16_t valve_normal, valve_blow, valve_cal;  /* 0=关 1=开, 对应 J1-J9 */
 } SensorRegs_t;
 
 typedef struct {
@@ -142,7 +180,7 @@ typedef struct {
     uint16_t ma_nox, ma_o2, work_mode;
     uint16_t coil_d01, coil_d02, coil_d03, coil_d04;
 
-    SensorRegs_t S1, S2;
+    SensorRegs_t S1, S2, S3;
 } VAR_T;
 
 void MODS_Poll(void);
@@ -241,6 +279,12 @@ extern uint16_t Var_Read_SensorBlowCmd(uint8_t ch);
 extern void Var_Write_SensorBlowInterval(uint8_t ch, uint16_t v);
 extern void Var_Write_SensorBlowDuration(uint8_t ch, uint16_t v);
 extern void Var_Write_SensorBlowCmd(uint8_t ch, uint16_t v);
+
+/* 阀门保持寄存器：v=0 正常抽气 1 反吹 2 校准；写时驱动 J1-J9，反吹任务会覆盖 valve_blow */
+extern uint16_t Var_Read_SensorValve(uint8_t ch, uint8_t v);
+extern void Var_Write_SensorValve(uint8_t ch, uint8_t v, uint16_t value);
+/** 反吹结束后由 blowback 调用，将 valve_blow 寄存器写回对应 GPIO */
+extern void Modbus_ApplySensorValveBlowToGPIO(uint8_t ch);
 
 /* Blowback/alarm config readback */
 extern void Var_Read_BlowbackCfg(uint16_t *p24, uint16_t *p25);

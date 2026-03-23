@@ -17,9 +17,11 @@ static uint8_t CalcSlopeIntercept(uint16_t *x, float *y, Parameter *p)
     return 1;
 }
 
-/* Sync channel params to g_tVar S1 or S2. */
+/* Sync channel params to g_tVar S1, S2, or S3. */
 static void SyncChannelToVar(uint8_t ch)
 {
+    if (ch >= 3u)
+        return;
     NoxChannel_t *c = &g_noxChannels[ch];
     Var_Write_SensorSeg1NoxA(ch, c->nox_low.a);
     Var_Write_SensorSeg1NoxB(ch, c->nox_low.b);

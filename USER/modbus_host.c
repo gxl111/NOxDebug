@@ -183,13 +183,12 @@ void MODH_ReciveNew(uint8_t _data)
 	uint8_t i;
 	
 	
-	for(i = 0; i < MODBUS_BAUD_RATE_LEN; i++)
-	{
-		if(HBAUD485 == ModbusBaudRate[i].Bps)
-		{
+	for (i = 0; i < MODBUS_BAUD_RATE_LEN; i++) {
+		if (HBAUD485 == ModbusBaudRate[i].Bps)
 			break;
-		}	
 	}
+	if (i >= MODBUS_BAUD_RATE_LEN)
+		i = MODBUS_BAUD_RATE_LEN - 1;  /* default if baud not in table */
 
 	/* Timer 1 = slave, timer 2 = host RX timeout */
 //	OLED_PrintASCIIString(10, 40,"2", &afont12x6, OLED_COLOR_NORMAL);

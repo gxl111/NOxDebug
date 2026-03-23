@@ -63,6 +63,11 @@ int MCP2515_Send(const MCP2515_CAN_Frame_t *frame);
 int MCP2515_Receive(MCP2515_CAN_Frame_t *frame);
 
 /**
+ * @brief 是否已成功初始化（Init 返回 0 后为 true；未初始化或失败时为 false）
+ */
+bool MCP2515_IsReady(void);
+
+/**
  * @brief 是否有接收中断（INT 引脚为低表示有事件）
  */
 bool MCP2515_HasInterrupt(void);

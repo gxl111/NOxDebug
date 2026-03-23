@@ -61,11 +61,11 @@ static void NOx_HandleOne(J1939_MESSAGE *RxMsgPtr, uint8_t ch_index)
     NoxChannel_UpdateFromCan(ch_index, RxMsgPtr->Mxe.Data);
 }
 
-/* Update Modbus per-channel readings: S1/S2 写入 Var；S3（ch2）无 Modbus 块，仅参与策略. */
+/* Update Modbus per-channel readings: S1/S2/S3 写入 Var. */
 static void NOx_UpdatePerChannelRegs(void)
 {
     LOCK_VAR();
-    for (uint8_t ch = 0; ch < 2u; ch++) {
+    for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
         NoxChannel_t *c = &g_noxChannels[ch];
         Var_Write_SensorLiveNox(ch, c->nox_ppm);
         Var_Write_SensorLiveO2(ch, c->o2_pct);
@@ -85,7 +85,7 @@ void NOxReceive(void *argument)
             NOx_HandleOne(&item.msg, item.channel_index);
         }
         /* 第二路 CAN（MCP2515）接收：SA 0x52 → 通道 2（Electrical Interface 18F00F52h） */
-        {
+        if (MCP2515_IsReady()) {
             MCP2515_CAN_Frame_t rx;
             while (MCP2515_Receive(&rx) == 1) {
                 if (rx.is_ext_id && rx.id == 0x18F00F52u && rx.len >= 8) {
@@ -145,7 +145,7 @@ void NOxReceive(void *argument)
 
         /* Heater command: 第一路 CAN 发送；第二路 CAN（MCP2515）也发送 18FEDF55（文档 4.2 节）. */
         J1939_CAN_Transmit(&TxMessage);
-        {
+        if (MCP2515_IsReady()) {
             MCP2515_CAN_Frame_t heater;
             heater.id = 0x18FEDF55u;
             heater.is_ext_id = true;
@@ -203,6 +203,11 @@ void ModBusSlave(void *argument)
 #endif
     AfterFlash_Init();
     Calibration_Init();
+#if SENSOR_POWER_GPIO_ENABLE
+    /* 将 power_on 寄存器同步到 GPIO（PC0/PC13/PB9），上电后输出与寄存器一致 */
+    for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++)
+        Var_Write_SensorPowerOn(ch, Var_Read_SensorPowerOn(ch));
+#endif
     Start_Receive();
 
     for (;;)
@@ -214,7 +219,7 @@ void Register_Init(void)
 {
     Var_Write_AlarmNoxHi((float)NOx_High);
     Var_Write_AlarmO2Lo((float)O2_Low);
-    for (uint8_t ch = 0; ch < 2u; ch++) {
+    for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
         NoxChannel_t *c = &g_noxChannels[ch];
         Var_Write_SensorSeg1NoxA(ch, c->nox_low.a);
         Var_Write_SensorSeg1NoxB(ch, c->nox_low.b);
@@ -228,23 +233,28 @@ void Register_Init(void)
         Var_Write_SensorP2O2(ch, c->o2_y[1]);
         Var_Write_SensorP3Nox(ch, c->nox_y[2]);
         Var_Write_SensorP3O2(ch, c->o2_y[2]);
-        Var_Write_SensorBlowInterval(ch, (uint16_t)(ch == 0 ? Blowback_GetInterval() : Blowback_GetIntervalCh1()));
-        Var_Write_SensorBlowDuration(ch, (uint16_t)(ch == 0 ? Blowback_GetDuration() : Blowback_GetDurationCh1()));
+        uint32_t iv = (ch == 0) ? Blowback_GetInterval() : (ch == 1) ? Blowback_GetIntervalCh1() : Blowback_GetIntervalCh2();
+        uint32_t dv = (ch == 0) ? Blowback_GetDuration() : (ch == 1) ? Blowback_GetDurationCh1() : Blowback_GetDurationCh2();
+        Var_Write_SensorBlowInterval(ch, (uint16_t)iv);
+        Var_Write_SensorBlowDuration(ch, (uint16_t)dv);
     }
     LOCK_VAR();
     g_tVar.S1.blow_status = 0u;
     g_tVar.S1.blow_countdown = (uint16_t)(Blowback_GetInterval() > 0u ? Blowback_GetInterval() : 0u);
     g_tVar.S2.blow_status = 0u;
     g_tVar.S2.blow_countdown = (uint16_t)(Blowback_GetIntervalCh1() > 0u ? Blowback_GetIntervalCh1() : 0u);
-    g_tVar.S1.power_on = 1u; /* default on; GPIO control when SENSOR_POWER_GPIO_ENABLE */
+    g_tVar.S3.blow_status = 0u;
+    g_tVar.S3.blow_countdown = (uint16_t)(Blowback_GetIntervalCh2() > 0u ? Blowback_GetIntervalCh2() : 0u);
+    g_tVar.S1.power_on = 1u;
     g_tVar.S2.power_on = 1u;
+    g_tVar.S3.power_on = 1u;
     g_tVar.work_mode = 1u;   /* default: mode1 主从 ch0 主 */
     UNLOCK_VAR();
 }
 
 void AfterFlash_Init(void)
 {
-    for (uint8_t ch = 0; ch < 2u; ch++) {
+    for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
         NoxChannel_t *c = &g_noxChannels[ch];
         c->nox_y[1] = Var_Read_SensorP2Nox(ch);
         c->o2_y[1]  = Var_Read_SensorP2O2(ch);
@@ -268,4 +278,5 @@ void AfterFlash_Init(void)
 
     Blowback_SetConfig((uint32_t)Var_Read_SensorBlowInterval(0), (uint32_t)Var_Read_SensorBlowDuration(0));
     Blowback_SetConfigCh1((uint32_t)Var_Read_SensorBlowInterval(1), (uint32_t)Var_Read_SensorBlowDuration(1));
+    Blowback_SetConfigCh2((uint32_t)Var_Read_SensorBlowInterval(2), (uint32_t)Var_Read_SensorBlowDuration(2));
 }
