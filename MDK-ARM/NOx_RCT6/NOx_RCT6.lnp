@@ -47,13 +47,19 @@
 "nox_rct6\port.o"
 "nox_rct6\font.o"
 "nox_rct6\oled.o"
+"nox_rct6\nox_sensor.o"
+"nox_rct6\nox_channel.o"
 "nox_rct6\j1939.o"
 "nox_rct6\modbus_slave.o"
+"nox_rct6\modbus_flash.o"
 "nox_rct6\nox.o"
+"nox_rct6\blowback.o"
+"nox_rct6\calibration.o"
+"nox_rct6\alarm.o"
 "nox_rct6\sdcard.o"
 "nox_rct6\modbus_host.o"
 "nox_rct6\modbus.o"
 --library_type=microlib --strict --scatter "NOx_RCT6\NOx_RCT6.sct"
---summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
+--libpath=F:\Keil_v5\ARM\ARMCC\lib --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers
 --list "..\NOx_RCT6.map" -o NOx_RCT6\NOx_RCT6.axf

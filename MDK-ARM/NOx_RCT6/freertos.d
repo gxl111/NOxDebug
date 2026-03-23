@@ -1,7 +1,7 @@
 nox_rct6\freertos.o: ../Core/Src/freertos.c
 nox_rct6\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-nox_rct6\freertos.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
-nox_rct6\freertos.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+nox_rct6\freertos.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
+nox_rct6\freertos.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
 nox_rct6\freertos.o: ../Core/Inc/FreeRTOSConfig.h
 nox_rct6\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
 nox_rct6\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h
@@ -44,9 +44,11 @@ nox_rct6\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cm
 nox_rct6\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h
 nox_rct6\freertos.o: ../USER/J1939.H
 nox_rct6\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h
-nox_rct6\freertos.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
-nox_rct6\freertos.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
+nox_rct6\freertos.o: F:\Keil_v5\ARM\ARMCC\include\string.h
+nox_rct6\freertos.o: F:\Keil_v5\ARM\ARMCC\include\stdio.h
 nox_rct6\freertos.o: ../USER/NOx.h
+nox_rct6\freertos.o: ../USER/nox_sensor.h
+nox_rct6\freertos.o: ../USER/app_config.h
 nox_rct6\freertos.o: ../Core/Inc/can.h
 nox_rct6\freertos.o: ../Core/Inc/usart.h
 nox_rct6\freertos.o: ../Core/Inc/gpio.h
@@ -60,3 +62,4 @@ nox_rct6\freertos.o: ../FATFS/Target/ffconf.h
 nox_rct6\freertos.o: ../USER/modbus_slave.h
 nox_rct6\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/semphr.h
 nox_rct6\freertos.o: ../USER/modbus.h
+nox_rct6\freertos.o: ../USER/modbus_flash.h

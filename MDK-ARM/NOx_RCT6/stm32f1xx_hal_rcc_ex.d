@@ -6,14 +6,14 @@ nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f1xx.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f103xe.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/CMSIS/Include/core_cm3.h
-nox_rct6\stm32f1xx_hal_rcc_ex.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+nox_rct6\stm32f1xx_hal_rcc_ex.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/CMSIS/Include/cmsis_version.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/CMSIS/Include/cmsis_compiler.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/CMSIS/Include/cmsis_armcc.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/CMSIS/Device/ST/STM32F1xx/Include/system_stm32f1xx.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h
-nox_rct6\stm32f1xx_hal_rcc_ex.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+nox_rct6\stm32f1xx_hal_rcc_ex.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_rcc_ex.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_gpio.h
 nox_rct6\stm32f1xx_hal_rcc_ex.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_gpio_ex.h

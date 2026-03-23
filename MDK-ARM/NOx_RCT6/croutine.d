@@ -1,7 +1,7 @@
 nox_rct6\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/croutine.c
 nox_rct6\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-nox_rct6\croutine.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
-nox_rct6\croutine.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+nox_rct6\croutine.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
+nox_rct6\croutine.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
 nox_rct6\croutine.o: ../Core/Inc/FreeRTOSConfig.h
 nox_rct6\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
 nox_rct6\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h

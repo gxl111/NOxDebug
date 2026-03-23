@@ -1,7 +1,7 @@
 nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM3/port.c
 nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-nox_rct6\port.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
-nox_rct6\port.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+nox_rct6\port.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
+nox_rct6\port.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
 nox_rct6\port.o: ../Core/Inc/FreeRTOSConfig.h
 nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
 nox_rct6\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h

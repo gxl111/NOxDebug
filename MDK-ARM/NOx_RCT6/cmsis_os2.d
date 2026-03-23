@@ -1,8 +1,8 @@
 nox_rct6\cmsis_os2.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.c
-nox_rct6\cmsis_os2.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
+nox_rct6\cmsis_os2.o: F:\Keil_v5\ARM\ARMCC\include\string.h
 nox_rct6\cmsis_os2.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h
-nox_rct6\cmsis_os2.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
-nox_rct6\cmsis_os2.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+nox_rct6\cmsis_os2.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
+nox_rct6\cmsis_os2.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
 nox_rct6\cmsis_os2.o: ../Drivers/CMSIS/Include/cmsis_compiler.h
 nox_rct6\cmsis_os2.o: ../Drivers/CMSIS/Include/cmsis_armcc.h
 nox_rct6\cmsis_os2.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h

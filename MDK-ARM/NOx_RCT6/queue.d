@@ -1,9 +1,9 @@
 nox_rct6\queue.o: ../Middlewares/Third_Party/FreeRTOS/Source/queue.c
-nox_rct6\queue.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
-nox_rct6\queue.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
+nox_rct6\queue.o: F:\Keil_v5\ARM\ARMCC\include\stdlib.h
+nox_rct6\queue.o: F:\Keil_v5\ARM\ARMCC\include\string.h
 nox_rct6\queue.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-nox_rct6\queue.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
-nox_rct6\queue.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+nox_rct6\queue.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
+nox_rct6\queue.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
 nox_rct6\queue.o: ../Core/Inc/FreeRTOSConfig.h
 nox_rct6\queue.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
 nox_rct6\queue.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h
