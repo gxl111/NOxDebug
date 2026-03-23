@@ -412,12 +412,11 @@ static void MODS_01H(void)
 */
 static void MODS_03H(void)
 {
-    /* 03H: read holding registers; request 8 bytes + CRC; response payload up to 200 bytes (100 regs). */
+    /* 03H: read holding registers; max MODBUS_FC03_MAX_REGS words per Modbus PDU. */
     uint16_t reg;
     uint16_t num;
     uint16_t i;
-    /* 100 registers * 2 bytes; allows Mbpoll-style 03 read of 0x0064 words in one frame */
-    uint8_t reg_value[200];
+    uint8_t reg_value[MODBUS_FC03_MAX_REGS * 2u];
 
     g_tModS.RspCode = RSP_OK;
 
@@ -438,8 +437,7 @@ static void MODS_03H(void)
 
 //        goto err_ret;    
 //    }
-    /* Max 100 registers per 03H (200 bytes payload); Modbus spec allows up to 125 */
-    if (num == 0u || num > 100u)
+    if (num == 0u || num > MODBUS_FC03_MAX_REGS)
     {
         g_tModS.RspCode = RSP_ERR_VALUE;
         goto err_ret;
