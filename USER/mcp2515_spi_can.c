@@ -122,16 +122,6 @@ static uint8_t spi_xfer_byte(uint8_t tx)
 	return rx;
 }
 
-static void spi_write_bytes(const uint8_t *buf, uint16_t len)
-{
-	HAL_SPI_Transmit(s_spi, (uint8_t*)buf, len, 100);
-}
-
-static void spi_read_bytes(uint8_t *buf, uint16_t len)
-{
-	HAL_SPI_Receive(s_spi, buf, len, 100);
-}
-
 static uint8_t mcp2515_read_reg(uint8_t addr)
 {
 	CS_LOW();
