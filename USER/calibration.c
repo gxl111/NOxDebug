@@ -1,7 +1,7 @@
 /**
  * @file    calibration.c
  * @brief   NOx/O2 3-point calibration per channel. Each sensor has its own cal trigger/point select (no P53).
- *          Updates g_noxChannels[ch] and g_tVar S1/S2.
+ *          Updates g_noxChannels[ch] and g_tVar S1/S2/S3.
  */
 #include "calibration.h"
 #include "modbus_slave.h"
