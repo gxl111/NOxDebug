@@ -157,10 +157,13 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define S_TX_BUF_SIZE       260
 
 typedef struct {
+    /** UART 字节流缓冲，仅 MODS_ReciveNew 写入；超时后新帧也从 [0] 起累加 */
     uint8_t RxBuf[S_RX_BUF_SIZE];
+    /** 仅 ISR 收包与 pending 恢复；与已完成帧长度无关 */
     uint8_t RxCount;
-    /* 3.5 字符超时瞬间的快照（与 ISR 写入的 RxBuf 解耦）；由 MODS_Poll 拷回 RxBuf 再解析 */
+    /** 3.5 字符超时瞬间从 RxBuf 拷贝的完整一帧；CRC/功能码解析只读此处，不再拷回 RxBuf */
     uint8_t RxFrameSnap[S_RX_BUF_SIZE];
+    /** RxFrameSnap 中有效字节数（快照长度） */
     uint8_t RxFrameLen;
     uint8_t RspCode;
     uint8_t TxBuf[S_TX_BUF_SIZE];
