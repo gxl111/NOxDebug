@@ -40,6 +40,7 @@ static void MODS_SendAckErr(uint8_t _ucErrCode);
 static void MODS_AnalyzeApp(void);
 
 static void MODS_RxTimeOut(void);
+static void MODS_RestartRxGapTimer(void);
 
 static void MODS_01H(void);
 static void MODS_03H(void);
@@ -102,10 +103,28 @@ void MODS_Poll(void)
 {
     uint16_t addr;
     uint16_t crc1;
+    uint8_t frame_len;
+    uint8_t pending_len = 0;
+    uint8_t pending_save[S_RX_BUF_SIZE];
 
     /* After 3.5 char timeout callback gives semaphore; we take it here. */
     
     if(pdTRUE==xSemaphoreTake(MODRx_SemaphoreHandle,portMAX_DELAY)){
+
+        NVIC_DisableIRQ(USART1_IRQn);
+        pending_len = g_tModS.RxCount;
+        if (pending_len > S_RX_BUF_SIZE)
+            pending_len = S_RX_BUF_SIZE;
+        if (pending_len > 0U)
+            (void)memcpy(pending_save, g_tModS.RxBuf, (size_t)pending_len);
+
+        frame_len = g_tModS.RxFrameLen;
+        if (frame_len > S_RX_BUF_SIZE)
+            frame_len = S_RX_BUF_SIZE;
+        if (frame_len > 0U)
+            (void)memcpy(g_tModS.RxBuf, g_tModS.RxFrameSnap, (size_t)frame_len);
+        g_tModS.RxCount = frame_len;
+        NVIC_EnableIRQ(USART1_IRQn);
 
         if (g_tModS.RxCount < 4)				/* need at least 4 bytes: addr+func+reg */
         {
@@ -133,7 +152,18 @@ void MODS_Poll(void)
     
 
 err_ret:
-    g_tModS.RxCount = 0;					/* clear for next frame */
+    NVIC_DisableIRQ(USART1_IRQn);
+    g_tModS.RxFrameLen = 0;
+    if (pending_len > 0U) {
+        if (pending_len > S_RX_BUF_SIZE)
+            pending_len = S_RX_BUF_SIZE;
+        (void)memcpy(g_tModS.RxBuf, pending_save, (size_t)pending_len);
+        g_tModS.RxCount = pending_len;
+        MODS_RestartRxGapTimer();
+    } else {
+        g_tModS.RxCount = 0;
+    }
+    NVIC_EnableIRQ(USART1_IRQn);
 }
 
 
@@ -185,20 +215,23 @@ void StartHardTimer(uint32_t _uiTimeOut, void * _pCallBack) {
 *  RTU inter-frame delay depends on baud; see ModbusBaudRate table at top of file.
 *********************************************************************************************************
 */
-void MODS_ReciveNew(uint8_t _byte)
+static void MODS_RestartRxGapTimer(void)
 {
     uint8_t i;
 
-    /* Find baud in table to get timeout (us); timer 1 = slave, timer 2 = host */
     for (i = 0; i < MODBUS_BAUD_RATE_LEN; i++) {
         if (SBAUD485 == ModbusBaudRate[i].Bps)
             break;
     }
     if (i >= MODBUS_BAUD_RATE_LEN)
-        i = MODBUS_BAUD_RATE_LEN - 1;  /* default to last entry if baud not in table */
+        i = MODBUS_BAUD_RATE_LEN - 1;
 
-    /* Start timer (us); TIM1 for slave, TIM2 for host */
     StartHardTimer(ModbusBaudRate[i].usTimeOut, (void *)MODS_RxTimeOut);
+}
+
+void MODS_ReciveNew(uint8_t _byte)
+{
+    MODS_RestartRxGapTimer();
 
     if (g_tModS.RxCount < S_RX_BUF_SIZE)
     {
@@ -215,7 +248,19 @@ void MODS_ReciveNew(uint8_t _byte)
 */
 static void MODS_RxTimeOut(void)
 {
-    xSemaphoreGiveFromISR(MODRx_SemaphoreHandle, NULL);
+    uint8_t n;
+
+    NVIC_DisableIRQ(USART1_IRQn);
+    n = g_tModS.RxCount;
+    if (n > S_RX_BUF_SIZE)
+        n = S_RX_BUF_SIZE;
+    if (n > 0U)
+        (void)memcpy(g_tModS.RxFrameSnap, g_tModS.RxBuf, (size_t)n);
+    g_tModS.RxFrameLen = n;
+    g_tModS.RxCount = 0;
+    NVIC_EnableIRQ(USART1_IRQn);
+
+    (void)xSemaphoreGiveFromISR(MODRx_SemaphoreHandle, NULL);
 }
 
 

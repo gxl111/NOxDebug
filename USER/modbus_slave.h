@@ -159,6 +159,9 @@ extern SemaphoreHandle_t g_hVarMutex;
 typedef struct {
     uint8_t RxBuf[S_RX_BUF_SIZE];
     uint8_t RxCount;
+    /* 3.5 字符超时瞬间的快照（与 ISR 写入的 RxBuf 解耦）；由 MODS_Poll 拷回 RxBuf 再解析 */
+    uint8_t RxFrameSnap[S_RX_BUF_SIZE];
+    uint8_t RxFrameLen;
     uint8_t RspCode;
     uint8_t TxBuf[S_TX_BUF_SIZE];
     uint8_t TxCount;
