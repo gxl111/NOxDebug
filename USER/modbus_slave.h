@@ -141,6 +141,11 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_S3_VALVE_BLOW   40138   /* J8_IN(PB5) */
 #define SLAVE_REG_S3_VALVE_CAL    40139   /* J9_IN(PB8) */
 
+/* 保持寄存器映射 40001..40139 共 139 字；Modbus 03H 单次最多读 MODBUS_FC03_MAX_REGS（125）——主站须分两次轮询，例如 40001×125 + 40126×14。 */
+#define MODBUS_FC03_MAX_REGS           125u
+#define SLAVE_HOLDING_REG_LAST         SLAVE_REG_S3_VALVE_CAL
+#define SLAVE_HOLDING_REG_TOTAL        139u
+
 #define RSP_OK              0
 #define RSP_ERR_CMD         0x01
 #define RSP_ERR_REG_ADDR    0x02
@@ -148,8 +153,8 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define RSP_ERR_WRITE       0x04
 
 #define S_RX_BUF_SIZE       60
-/* 03H read max 100 regs => 3 + 200 + 2 CRC; use 256 for margin */
-#define S_TX_BUF_SIZE       256
+/* 03H 最多 125 字 ×2 字节 + 地址/功能/字节数/CRC ≈ 255，留余量 */
+#define S_TX_BUF_SIZE       260
 
 typedef struct {
     uint8_t RxBuf[S_RX_BUF_SIZE];
