@@ -69,3 +69,5 @@ nox_rct6\nox.o: ../FATFS/Target/ffconf.h
 nox_rct6\nox.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os.h
 nox_rct6\nox.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h
 nox_rct6\nox.o: ..\USER\nox_channel.h
+nox_rct6\nox.o: ..\USER\mcp2515_spi_can.h
+nox_rct6\nox.o: F:\Keil_v5\ARM\ARMCC\include\stdbool.h
