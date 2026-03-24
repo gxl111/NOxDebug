@@ -1,8 +1,8 @@
 nox_rct6\event_groups.o: ../Middlewares/Third_Party/FreeRTOS/Source/event_groups.c
-nox_rct6\event_groups.o: F:\Keil_v5\ARM\ARMCC\include\stdlib.h
+nox_rct6\event_groups.o: F:/Keil_v5/ARM/ARMCC/include/stdlib.h
 nox_rct6\event_groups.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-nox_rct6\event_groups.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
-nox_rct6\event_groups.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
+nox_rct6\event_groups.o: F:/Keil_v5/ARM/ARMCC/include/stddef.h
+nox_rct6\event_groups.o: F:/Keil_v5/ARM/ARMCC/include/stdint.h
 nox_rct6\event_groups.o: ../Core/Inc/FreeRTOSConfig.h
 nox_rct6\event_groups.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
 nox_rct6\event_groups.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h

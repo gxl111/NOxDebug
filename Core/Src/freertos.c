@@ -66,21 +66,21 @@ const osThreadAttr_t defaultTask_attributes = {
 osThreadId_t NOx_DefaultHandle;
 const osThreadAttr_t NOx_Default_attributes = {
   .name = "NOx_Default",
-  .stack_size = 768 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ModBus_Slave */
 osThreadId_t ModBus_SlaveHandle;
 const osThreadAttr_t ModBus_Slave_attributes = {
   .name = "ModBus_Slave",
-  .stack_size = 512 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for NOx_Receive */
 osThreadId_t NOx_ReceiveHandle;
 const osThreadAttr_t NOx_Receive_attributes = {
   .name = "NOx_Receive",
-  .stack_size = 512 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ModBus_Host */

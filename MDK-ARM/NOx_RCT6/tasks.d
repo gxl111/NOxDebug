@@ -1,9 +1,9 @@
 nox_rct6\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/tasks.c
-nox_rct6\tasks.o: F:\Keil_v5\ARM\ARMCC\include\stdlib.h
-nox_rct6\tasks.o: F:\Keil_v5\ARM\ARMCC\include\string.h
+nox_rct6\tasks.o: F:/Keil_v5/ARM/ARMCC/include/stdlib.h
+nox_rct6\tasks.o: F:/Keil_v5/ARM/ARMCC/include/string.h
 nox_rct6\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-nox_rct6\tasks.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
-nox_rct6\tasks.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
+nox_rct6\tasks.o: F:/Keil_v5/ARM/ARMCC/include/stddef.h
+nox_rct6\tasks.o: F:/Keil_v5/ARM/ARMCC/include/stdint.h
 nox_rct6\tasks.o: ../Core/Inc/FreeRTOSConfig.h
 nox_rct6\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
 nox_rct6\tasks.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h

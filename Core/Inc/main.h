@@ -59,10 +59,22 @@ void Error_Handler(void);
 
 /* Private defines -----------------------------------------------------------*/
 #define RS4851 huart1
+#define SENSOR_POWER1_Pin GPIO_PIN_13
+#define SENSOR_POWER1_GPIO_Port GPIOC
+#define SENSOR_POWER0_Pin GPIO_PIN_0
+#define SENSOR_POWER0_GPIO_Port GPIOC
 #define RS485_DR1_Pin GPIO_PIN_1
 #define RS485_DR1_GPIO_Port GPIOC
-#define SD_CS1_Pin GPIO_PIN_3
-#define SD_CS1_GPIO_Port GPIOA
+#define J5_IN_Pin GPIO_PIN_3
+#define J5_IN_GPIO_Port GPIOC
+#define J4_IN_Pin GPIO_PIN_0
+#define J4_IN_GPIO_Port GPIOA
+#define J3_IN_Pin GPIO_PIN_1
+#define J3_IN_GPIO_Port GPIOA
+#define J2_IN_Pin GPIO_PIN_3
+#define J2_IN_GPIO_Port GPIOA
+#define J1_IN_Pin GPIO_PIN_4
+#define J1_IN_GPIO_Port GPIOA
 #define SD_SPI_SCK_Pin GPIO_PIN_5
 #define SD_SPI_SCK_GPIO_Port GPIOA
 #define SD_SPI_MISO_Pin GPIO_PIN_6
@@ -79,31 +91,24 @@ void Error_Handler(void);
 #define REMOTE_CRT_GPIO_Port GPIOC
 #define SD_CS_Pin GPIO_PIN_8
 #define SD_CS_GPIO_Port GPIOC
-/* OLED I2C1 引脚（已禁用屏显；I2C1 仍用 PB6/PB7，见 i2c.c） */
-// #define OLED_SCL_Pin GPIO_PIN_6
-// #define OLED_SCL_GPIO_Port GPIOB
-// #define OLED_SDA_Pin GPIO_PIN_7
-// #define OLED_SDA_GPIO_Port GPIOB
-
-/* 阀门继电器 J1-J9：每传感器 3 个（正常抽气检测、反吹、校准），保持寄存器控制 */
-#define J1_IN_Pin   GPIO_PIN_4
-#define J1_IN_GPIO_Port  GPIOA   /* S1 正常抽气 */
-#define J2_IN_Pin   GPIO_PIN_3
-#define J2_IN_GPIO_Port  GPIOA   /* S1 反吹 */
-#define J3_IN_Pin   GPIO_PIN_1
-#define J3_IN_GPIO_Port  GPIOA   /* S1 校准 */
-#define J4_IN_Pin   GPIO_PIN_0
-#define J4_IN_GPIO_Port  GPIOA   /* S2 正常抽气 */
-#define J5_IN_Pin   GPIO_PIN_3
-#define J5_IN_GPIO_Port  GPIOC   /* S2 反吹 */
-#define J6_IN_Pin   GPIO_PIN_3
-#define J6_IN_GPIO_Port  GPIOB   /* S2 校准 */
-#define J7_IN_Pin   GPIO_PIN_4
-#define J7_IN_GPIO_Port  GPIOB   /* S3 正常抽气 */
-#define J8_IN_Pin   GPIO_PIN_5
-#define J8_IN_GPIO_Port  GPIOB   /* S3 反吹 */
-#define J9_IN_Pin   GPIO_PIN_8
-#define J9_IN_GPIO_Port  GPIOB   /* S3 校准 */
+#define MCP2515_CS_Pin GPIO_PIN_10
+#define MCP2515_CS_GPIO_Port GPIOC
+#define MCP2515_INT_Pin GPIO_PIN_11
+#define MCP2515_INT_GPIO_Port GPIOC
+#define J6_IN_Pin GPIO_PIN_3
+#define J6_IN_GPIO_Port GPIOB
+#define J7_IN_Pin GPIO_PIN_4
+#define J7_IN_GPIO_Port GPIOB
+#define J8_IN_Pin GPIO_PIN_5
+#define J8_IN_GPIO_Port GPIOB
+#define OLED_SCL_Pin GPIO_PIN_6
+#define OLED_SCL_GPIO_Port GPIOB
+#define OLED_SDA_Pin GPIO_PIN_7
+#define OLED_SDA_GPIO_Port GPIOB
+#define J9_IN_Pin GPIO_PIN_8
+#define J9_IN_GPIO_Port GPIOB
+#define SENSOR_POWER2_Pin GPIO_PIN_9
+#define SENSOR_POWER2_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 /* MCP2515 SPI-CAN: CS=PC10, INT=PC11 (SPI2: PB13 SCK, PB14 MISO, PB15 MOSI) */

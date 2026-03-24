@@ -86,7 +86,7 @@ DSTATUS USER_initialize (
   /* USER CODE BEGIN INIT */
   uint8_t res;
 	res = SD_init();	//SD_Initialize() 
-	if(res)//STM32 SPIbug,sd????,?SPI§Õ?
+	if(res)//STM32 SPIbug,sd????,?SPIï¿½ï¿½?
 	{
 		SPI_setspeed(SPI_BAUDRATEPRESCALER_256);
 		spi_readwrite(0xff);//?8?

@@ -1,8 +1,8 @@
 nox_rct6\oled.o: ..\HARDWARE\oled.c
 nox_rct6\oled.o: ..\HARDWARE\oled.h
 nox_rct6\oled.o: ..\HARDWARE\font.h
-nox_rct6\oled.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
-nox_rct6\oled.o: F:\Keil_v5\ARM\ARMCC\include\string.h
+nox_rct6\oled.o: F:/Keil_v5/ARM/ARMCC/include/stdint.h
+nox_rct6\oled.o: F:/Keil_v5/ARM/ARMCC/include/string.h
 nox_rct6\oled.o: ../Core/Inc/main.h
 nox_rct6\oled.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h
 nox_rct6\oled.o: ../Core/Inc/stm32f1xx_hal_conf.h
@@ -17,7 +17,7 @@ nox_rct6\oled.o: ../Drivers/CMSIS/Include/cmsis_armcc.h
 nox_rct6\oled.o: ../Drivers/CMSIS/Device/ST/STM32F1xx/Include/system_stm32f1xx.h
 nox_rct6\oled.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h
 nox_rct6\oled.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h
-nox_rct6\oled.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
+nox_rct6\oled.o: F:/Keil_v5/ARM/ARMCC/include/stddef.h
 nox_rct6\oled.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_rcc_ex.h
 nox_rct6\oled.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_gpio.h
 nox_rct6\oled.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_gpio_ex.h
@@ -35,8 +35,8 @@ nox_rct6\oled.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim.h
 nox_rct6\oled.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim_ex.h
 nox_rct6\oled.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h
 nox_rct6\oled.o: ../Core/Inc/i2c.h
-nox_rct6\oled.o: F:\Keil_v5\ARM\ARMCC\include\math.h
-nox_rct6\oled.o: F:\Keil_v5\ARM\ARMCC\include\stdlib.h
+nox_rct6\oled.o: F:/Keil_v5/ARM/ARMCC/include/math.h
+nox_rct6\oled.o: F:/Keil_v5/ARM/ARMCC/include/stdlib.h
 nox_rct6\oled.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
 nox_rct6\oled.o: ../Core/Inc/FreeRTOSConfig.h
 nox_rct6\oled.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h

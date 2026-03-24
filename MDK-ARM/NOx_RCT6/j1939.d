@@ -1,8 +1,8 @@
 nox_rct6\j1939.o: ..\USER\J1939.c
 nox_rct6\j1939.o: ..\USER\J1939.H
 nox_rct6\j1939.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-nox_rct6\j1939.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
-nox_rct6\j1939.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
+nox_rct6\j1939.o: F:/Keil_v5/ARM/ARMCC/include/stddef.h
+nox_rct6\j1939.o: F:/Keil_v5/ARM/ARMCC/include/stdint.h
 nox_rct6\j1939.o: ../Core/Inc/FreeRTOSConfig.h
 nox_rct6\j1939.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
 nox_rct6\j1939.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h
@@ -46,7 +46,7 @@ nox_rct6\j1939.o: ../Core/Inc/can.h
 nox_rct6\j1939.o: ..\USER\NOx.h
 nox_rct6\j1939.o: ..\USER\nox_sensor.h
 nox_rct6\j1939.o: ..\USER\app_config.h
-nox_rct6\j1939.o: F:\Keil_v5\ARM\ARMCC\include\string.h
-nox_rct6\j1939.o: F:\Keil_v5\ARM\ARMCC\include\stdio.h
+nox_rct6\j1939.o: F:/Keil_v5/ARM/ARMCC/include/string.h
+nox_rct6\j1939.o: F:/Keil_v5/ARM/ARMCC/include/stdio.h
 nox_rct6\j1939.o: ../Core/Inc/usart.h
 nox_rct6\j1939.o: ../Core/Inc/gpio.h

@@ -8,14 +8,14 @@ nox_rct6\nox.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_def.h
 nox_rct6\nox.o: ../Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f1xx.h
 nox_rct6\nox.o: ../Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f103xe.h
 nox_rct6\nox.o: ../Drivers/CMSIS/Include/core_cm3.h
-nox_rct6\nox.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
+nox_rct6\nox.o: F:/Keil_v5/ARM/ARMCC/include/stdint.h
 nox_rct6\nox.o: ../Drivers/CMSIS/Include/cmsis_version.h
 nox_rct6\nox.o: ../Drivers/CMSIS/Include/cmsis_compiler.h
 nox_rct6\nox.o: ../Drivers/CMSIS/Include/cmsis_armcc.h
 nox_rct6\nox.o: ../Drivers/CMSIS/Device/ST/STM32F1xx/Include/system_stm32f1xx.h
 nox_rct6\nox.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h
 nox_rct6\nox.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h
-nox_rct6\nox.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
+nox_rct6\nox.o: F:/Keil_v5/ARM/ARMCC/include/stddef.h
 nox_rct6\nox.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_rcc_ex.h
 nox_rct6\nox.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_gpio.h
 nox_rct6\nox.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_gpio_ex.h
@@ -45,8 +45,8 @@ nox_rct6\nox.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
 nox_rct6\nox.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h
 nox_rct6\nox.o: ..\USER\nox_sensor.h
 nox_rct6\nox.o: ..\USER\app_config.h
-nox_rct6\nox.o: F:\Keil_v5\ARM\ARMCC\include\string.h
-nox_rct6\nox.o: F:\Keil_v5\ARM\ARMCC\include\stdio.h
+nox_rct6\nox.o: F:/Keil_v5/ARM/ARMCC/include/string.h
+nox_rct6\nox.o: F:/Keil_v5/ARM/ARMCC/include/stdio.h
 nox_rct6\nox.o: ../Core/Inc/can.h
 nox_rct6\nox.o: ../Core/Inc/usart.h
 nox_rct6\nox.o: ../Core/Inc/gpio.h
@@ -59,8 +59,6 @@ nox_rct6\nox.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/timers.h
 nox_rct6\nox.o: ..\USER\blowback.h
 nox_rct6\nox.o: ..\USER\calibration.h
 nox_rct6\nox.o: ..\USER\alarm.h
-nox_rct6\nox.o: ../HARDWARE/oled.h
-nox_rct6\nox.o: ../HARDWARE/font.h
 nox_rct6\nox.o: ../HARDWARE/sdcard.h
 nox_rct6\nox.o: ../Core/Inc/spi.h
 nox_rct6\nox.o: ../Middlewares/Third_Party/FatFs/src/ff.h
@@ -70,4 +68,4 @@ nox_rct6\nox.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_o
 nox_rct6\nox.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h
 nox_rct6\nox.o: ..\USER\nox_channel.h
 nox_rct6\nox.o: ..\USER\mcp2515_spi_can.h
-nox_rct6\nox.o: F:\Keil_v5\ARM\ARMCC\include\stdbool.h
+nox_rct6\nox.o: F:/Keil_v5/ARM/ARMCC/include/stdbool.h

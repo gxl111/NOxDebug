@@ -1,5 +1,5 @@
 nox_rct6\user_diskio.o: ../FATFS/Target/user_diskio.c
-nox_rct6\user_diskio.o: F:\Keil_v5\ARM\ARMCC\include\string.h
+nox_rct6\user_diskio.o: F:/Keil_v5/ARM/ARMCC/include/string.h
 nox_rct6\user_diskio.o: ../Middlewares/Third_Party/FatFs/src/ff_gen_drv.h
 nox_rct6\user_diskio.o: ../Middlewares/Third_Party/FatFs/src/diskio.h
 nox_rct6\user_diskio.o: ../Middlewares/Third_Party/FatFs/src/integer.h
@@ -13,14 +13,14 @@ nox_rct6\user_diskio.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_def.h
 nox_rct6\user_diskio.o: ../Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f1xx.h
 nox_rct6\user_diskio.o: ../Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f103xe.h
 nox_rct6\user_diskio.o: ../Drivers/CMSIS/Include/core_cm3.h
-nox_rct6\user_diskio.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
+nox_rct6\user_diskio.o: F:/Keil_v5/ARM/ARMCC/include/stdint.h
 nox_rct6\user_diskio.o: ../Drivers/CMSIS/Include/cmsis_version.h
 nox_rct6\user_diskio.o: ../Drivers/CMSIS/Include/cmsis_compiler.h
 nox_rct6\user_diskio.o: ../Drivers/CMSIS/Include/cmsis_armcc.h
 nox_rct6\user_diskio.o: ../Drivers/CMSIS/Device/ST/STM32F1xx/Include/system_stm32f1xx.h
 nox_rct6\user_diskio.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h
 nox_rct6\user_diskio.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h
-nox_rct6\user_diskio.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
+nox_rct6\user_diskio.o: F:/Keil_v5/ARM/ARMCC/include/stddef.h
 nox_rct6\user_diskio.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_rcc_ex.h
 nox_rct6\user_diskio.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_gpio.h
 nox_rct6\user_diskio.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_gpio_ex.h

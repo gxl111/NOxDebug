@@ -1,8 +1,8 @@
 nox_rct6\modbus_slave.o: ..\USER\modbus_slave.c
 nox_rct6\modbus_slave.o: ..\USER\modbus_slave.h
-nox_rct6\modbus_slave.o: F:\Keil_v5\ARM\ARMCC\include\stdint.h
+nox_rct6\modbus_slave.o: F:/Keil_v5/ARM/ARMCC/include/stdint.h
 nox_rct6\modbus_slave.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-nox_rct6\modbus_slave.o: F:\Keil_v5\ARM\ARMCC\include\stddef.h
+nox_rct6\modbus_slave.o: F:/Keil_v5/ARM/ARMCC/include/stddef.h
 nox_rct6\modbus_slave.o: ../Core/Inc/FreeRTOSConfig.h
 nox_rct6\modbus_slave.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
 nox_rct6\modbus_slave.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h
@@ -50,7 +50,5 @@ nox_rct6\modbus_slave.o: ..\USER\modbus_flash.h
 nox_rct6\modbus_slave.o: ..\USER\nox_channel.h
 nox_rct6\modbus_slave.o: ..\USER\app_config.h
 nox_rct6\modbus_slave.o: ..\USER\nox_sensor.h
-nox_rct6\modbus_slave.o: F:\Keil_v5\ARM\ARMCC\include\string.h
+nox_rct6\modbus_slave.o: F:/Keil_v5/ARM/ARMCC/include/string.h
 nox_rct6\modbus_slave.o: ../Core/Inc/tim.h
-nox_rct6\modbus_slave.o: ../HARDWARE/oled.h
-nox_rct6\modbus_slave.o: ../HARDWARE/font.h

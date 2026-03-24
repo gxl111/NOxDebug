@@ -53,6 +53,7 @@
 "nox_rct6\modbus_slave.o"
 "nox_rct6\modbus_flash.o"
 "nox_rct6\nox.o"
+"nox_rct6\mcp2515_spi_can.o"
 "nox_rct6\blowback.o"
 "nox_rct6\calibration.o"
 "nox_rct6\alarm.o"
