@@ -106,7 +106,6 @@ int main(void)
   MX_CAN_Init();
   MX_I2C1_Init();
   MX_I2C2_Init();
-  MX_UART4_Init();
   MX_UART5_Init();
   MX_FATFS_Init();
   MX_TIM2_Init();
