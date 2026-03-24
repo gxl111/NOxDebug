@@ -1,7 +1,7 @@
 /**
  ******************************************************************************
  * @file    mcp2515_spi_can.c
- * @brief   MCP2515 SPI 转 CAN 驱动实现（SPI2 + PC10 CS, PC11 INT）
+ * @brief   MCP2515 SPI 转 CAN 驱动实现（SPI2 + CS/INT 由 CubeMX gpio.c 配置）
  ******************************************************************************
  */
 #include "mcp2515_spi_can.h"
@@ -92,34 +92,36 @@ static const uint8_t *const cnf_tables[] = {
 };
 
 static SPI_HandleTypeDef *s_spi = &hspi2;
-static bool s_mcp2515_ready = false;
-
-/* 在模块内初始化 MCP2515 所用 GPIO：CS=PC10 输出，INT=PC11 输入 */
-static void mcp2515_gpio_init(void)
-{
-	__HAL_RCC_GPIOC_CLK_ENABLE();
-	GPIO_InitTypeDef g = {0};
-	g.Pin   = MCP2515_CS_Pin;
-	g.Mode  = GPIO_MODE_OUTPUT_PP;
-	g.Pull  = GPIO_NOPULL;
-	g.Speed = GPIO_SPEED_FREQ_HIGH;
-	HAL_GPIO_Init(MCP2515_CS_GPIO_Port, &g);
-	HAL_GPIO_WritePin(MCP2515_CS_GPIO_Port, MCP2515_CS_Pin, GPIO_PIN_SET);
-
-	g.Pin  = MCP2515_INT_Pin;
-	g.Mode = GPIO_MODE_INPUT;
-	g.Pull = GPIO_PULLUP;
-	HAL_GPIO_Init(MCP2515_INT_GPIO_Port, &g);
-}
+static volatile bool s_mcp2515_ready = false;
 
 #define CS_LOW()   HAL_GPIO_WritePin(MCP2515_CS_GPIO_Port, MCP2515_CS_Pin, GPIO_PIN_RESET)
 #define CS_HIGH()  HAL_GPIO_WritePin(MCP2515_CS_GPIO_Port, MCP2515_CS_Pin, GPIO_PIN_SET)
 
 static uint8_t spi_xfer_byte(uint8_t tx)
 {
-	uint8_t rx;
-	HAL_SPI_TransmitReceive(s_spi, &tx, &rx, 1, 50);
+	uint8_t rx = 0xFFu;
+	if (HAL_SPI_TransmitReceive(s_spi, &tx, &rx, 1, 50) != HAL_OK)
+		return 0xFFu;
 	return rx;
+}
+
+/* 与 TX/RX 寄存器布局一致：标准 11 位或扩展 29 位 */
+static void mcp2515_id_to_regs(uint32_t id, bool ext,
+			       uint8_t *sidh, uint8_t *sidl, uint8_t *eid8, uint8_t *eid0)
+{
+	if (ext) {
+		*sidh = (uint8_t)(id >> 21);
+		*sidl = (uint8_t)(((id >> 18) & 7u) << 5) | 0x08u
+			| (uint8_t)((id >> 16) & 3u);
+		*eid8 = (uint8_t)(id >> 8);
+		*eid0 = (uint8_t)(id & 0xFFu);
+	} else {
+		id &= 0x7FFu;
+		*sidh = (uint8_t)(id >> 3);
+		*sidl = (uint8_t)((id & 7u) << 5);
+		*eid8 = 0;
+		*eid0 = 0;
+	}
 }
 
 static uint8_t mcp2515_read_reg(uint8_t addr)
@@ -130,6 +132,14 @@ static uint8_t mcp2515_read_reg(uint8_t addr)
 	uint8_t v = spi_xfer_byte(0);
 	CS_HIGH();
 	return v;
+}
+
+static int mcp2515_verify_opmode(uint8_t expected_mode_bits)
+{
+	uint8_t stat = mcp2515_read_reg(MCP2515_CANSTAT);
+	if ((stat & MCP2515_OPMODE_MASK) != expected_mode_bits)
+		return -1;
+	return 0;
 }
 
 static void mcp2515_write_reg(uint8_t addr, uint8_t val)
@@ -199,7 +209,9 @@ int MCP2515_Init(MCP2515_Baud_t baud)
 	if (baud >= MCP2515_BAUD_COUNT)
 		return -1;
 
-	mcp2515_gpio_init();
+	s_mcp2515_ready = false;
+
+	/* 依赖 main 中先于本函数调用 MX_GPIO_Init（CS/INT）与 MX_SPI2_Init */
 	mcp2515_reset();
 
 	if (mcp2515_enter_config() != 0)
@@ -218,6 +230,9 @@ int MCP2515_Init(MCP2515_Baud_t baud)
 
 	mcp2515_set_normal();
 	HAL_Delay(1);
+	if (mcp2515_verify_opmode(MCP2515_REQOP_NORMAL) != 0)
+		return -3;
+
 	s_mcp2515_ready = true;
 	return 0;
 }
@@ -229,8 +244,14 @@ bool MCP2515_IsReady(void)
 
 int MCP2515_Send(const MCP2515_CAN_Frame_t *frame)
 {
-	if (frame->len > 8)
+	if (frame == NULL || frame->len > 8)
 		return -1;
+	if (!frame->is_ext_id) {
+		if (frame->id > 0x7FFu)
+			return -3;
+	} else if (frame->id > 0x1FFFFFFFu) {
+		return -3;
+	}
 
 	/* 等待 TXB0 空闲 */
 	uint32_t t = 0;
@@ -241,27 +262,18 @@ int MCP2515_Send(const MCP2515_CAN_Frame_t *frame)
 	}
 
 	uint8_t sidh, sidl, eid8, eid0;
-	if (frame->is_ext_id) {
-		/* 29-bit: SIDH=id[28:21], SIDL[7:5]=id[20:18], SIDL[3]=EXIDE, SIDL[1:0]=id[17:16], EID8=id[15:8], EID0=id[7:0] */
-		sidh = (uint8_t)(frame->id >> 21);
-		sidl = (uint8_t)(((frame->id >> 18) & 7) << 5) | 0x08 | (uint8_t)((frame->id >> 16) & 3);
-		eid8 = (uint8_t)(frame->id >> 8);
-		eid0 = (uint8_t)(frame->id & 0xFF);
-	} else {
-		sidh = (uint8_t)(frame->id >> 3);
-		sidl = (uint8_t)((frame->id & 7) << 5);
-		eid8 = 0;
-		eid0 = 0;
-	}
+	mcp2515_id_to_regs(frame->id, frame->is_ext_id, &sidh, &sidl, &eid8, &eid0);
 
 	uint8_t buf[13];
+	memset(buf, 0, sizeof(buf));
 	buf[0] = sidh;
 	buf[1] = sidl;
 	buf[2] = eid8;
 	buf[3] = eid0;
-	buf[4] = frame->len & 0x0F;
+	buf[4] = frame->len & 0x0Fu;
 	memcpy(&buf[5], frame->data, frame->len);
-	mcp2515_write_regs(MCP2515_TXB0SIDH, buf, 5 + 8);
+	/* 只写 SIDH..DLC + 实际数据字节，避免 len<8 时把栈上垃圾写入 MCP2515 */
+	mcp2515_write_regs(MCP2515_TXB0SIDH, buf, (uint8_t)(5u + frame->len));
 
 	/* 请求发送 */
 	CS_LOW();
@@ -292,6 +304,9 @@ static void read_rxb_to_frame(uint8_t base_sidh, MCP2515_CAN_Frame_t *frame)
 
 int MCP2515_Receive(MCP2515_CAN_Frame_t *frame)
 {
+	if (frame == NULL)
+		return -1;
+
 	uint8_t intf = mcp2515_read_reg(MCP2515_CANINTF);
 	if (intf & MCP2515_CANINTF_RX0IF) {
 		read_rxb_to_frame(MCP2515_RXB0SIDH, frame);
@@ -311,23 +326,15 @@ bool MCP2515_HasInterrupt(void)
 	return HAL_GPIO_ReadPin(MCP2515_INT_GPIO_Port, MCP2515_INT_Pin) == GPIO_PIN_RESET;
 }
 
-void MCP2515_SetFilter(uint32_t id, uint32_t mask, bool ext)
+int MCP2515_SetFilter(uint32_t id, uint32_t mask, bool ext)
 {
 	if (mcp2515_enter_config() != 0)
-		return;
+		return -1;
 
-	uint8_t sidh = (uint8_t)(id >> 3);
-	uint8_t sidl = (uint8_t)((id & 7) << 5);
-	uint8_t eid8 = (uint8_t)(id >> 16);
-	uint8_t eid0 = (uint8_t)(id >> 8);
-	if (ext)
-		sidl |= 0x08;
-	uint8_t msk_sidh = (uint8_t)(mask >> 3);
-	uint8_t msk_sidl = (uint8_t)((mask & 7) << 5);
-	if (ext)
-		msk_sidl |= 0x08;
-	uint8_t msk_eid8 = (uint8_t)(mask >> 16);
-	uint8_t msk_eid0 = (uint8_t)(mask >> 8);
+	uint8_t sidh, sidl, eid8, eid0;
+	uint8_t msk_sidh, msk_sidl, msk_eid8, msk_eid0;
+	mcp2515_id_to_regs(id, ext, &sidh, &sidl, &eid8, &eid0);
+	mcp2515_id_to_regs(mask, ext, &msk_sidh, &msk_sidl, &msk_eid8, &msk_eid0);
 
 	mcp2515_write_reg(MCP2515_RXF0SIDH, sidh);
 	mcp2515_write_reg(MCP2515_RXF0SIDL, sidl);
@@ -338,5 +345,19 @@ void MCP2515_SetFilter(uint32_t id, uint32_t mask, bool ext)
 	mcp2515_write_reg(MCP2515_RXM0EID8, msk_eid8);
 	mcp2515_write_reg(MCP2515_RXM0EID0, msk_eid0);
 
+	/* Init 里 RXM=11 会忽略滤波器；此处改为按滤波器验收（扩展/标准） */
+	if (ext) {
+		mcp2515_write_reg(MCP2515_RXB0CTRL, 0x40u | MCP2515_RXB0CTRL_BUKT);
+		mcp2515_write_reg(MCP2515_RXB1CTRL, 0x40u);
+	} else {
+		mcp2515_write_reg(MCP2515_RXB0CTRL, 0x20u | MCP2515_RXB0CTRL_BUKT);
+		mcp2515_write_reg(MCP2515_RXB1CTRL, 0x20u);
+	}
+
 	mcp2515_set_normal();
+	HAL_Delay(1);
+	if (mcp2515_verify_opmode(MCP2515_REQOP_NORMAL) != 0)
+		return -2;
+
+	return 0;
 }

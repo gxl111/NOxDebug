@@ -43,22 +43,20 @@ typedef struct {
 
 /**
  * @brief 初始化 MCP2515（SPI2 + CS/INT），配置波特率并进入正常模式
- * @param baud 波特率枚举
- * @return 0 成功，负值失败
+ * @return 0 成功；-1 baud 非法；-2 进配置模式失败；-3 未能确认 Normal 模式
  */
 int MCP2515_Init(MCP2515_Baud_t baud);
 
 /**
  * @brief 发送一帧 CAN 报文
- * @param frame 帧内容（id, data, len, is_ext_id）
- * @return 0 成功，负值失败
+ * @return 0 成功；-1 参数非法；-2 TX 超时；-3 ID 超出范围（标准>0x7FF 或扩展>0x1FFFFFFF）
  */
 int MCP2515_Send(const MCP2515_CAN_Frame_t *frame);
 
 /**
  * @brief 轮询接收一帧（无阻塞，无数据时立即返回）
  * @param frame 输出帧
- * @return 1 读到一帧，0 无数据，负值错误
+ * @return 1 读到一帧，0 无数据，-1 参数非法
  */
 int MCP2515_Receive(MCP2515_CAN_Frame_t *frame);
 
@@ -68,18 +66,15 @@ int MCP2515_Receive(MCP2515_CAN_Frame_t *frame);
 bool MCP2515_IsReady(void);
 
 /**
- * @brief 是否有接收中断（INT 引脚为低表示有事件）
+ * @brief INT 为低表示 MCP2515 有未处理中断（与 CANINTE 一致时多为 RX）
  */
 bool MCP2515_HasInterrupt(void);
 
 /**
- * @brief 设置接收滤波（可选）：只接受指定 ID 或范围，便于接传感器
- *        默认接收所有帧；若需过滤可在 Init 后调用此函数。
- * @param id  接受的标准/扩展 ID（与 mask 配合）
- * @param mask 掩码：1 表示必须匹配 id 的该位，0 表示不关心
- * @param ext 是否扩展 ID
+ * @brief 设置接收滤波（须在 Init 成功后调用）
+ * @return 0 成功；-1 无法进入配置模式；-2 未能确认进入 Normal 模式
  */
-void MCP2515_SetFilter(uint32_t id, uint32_t mask, bool ext);
+int MCP2515_SetFilter(uint32_t id, uint32_t mask, bool ext);
 
 #ifdef __cplusplus
 }
