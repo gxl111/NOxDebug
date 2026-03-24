@@ -20,12 +20,14 @@ MSD_CARDINFO SD0_CardInfo;
 
 uint8_t spi_readwrite(uint8_t Txdata){
 	uint8_t Rxdata;	
-	HAL_SPI_TransmitReceive(&hspi2,&Txdata,&Rxdata,1,100);
+	HAL_SPI_TransmitReceive(&hspi1,&Txdata,&Rxdata,1,100);
 	return Rxdata;
 }
-// SPI baud rate prescaler (hspi2)
+
+/* SD 卡走 SPI1（PA5/6/7）；SPI2 专用于 MCP2515 */
 void SPI_setspeed(uint8_t speed){
-	hspi2.Init.BaudRatePrescaler = speed;
+	hspi1.Init.BaudRatePrescaler = speed;
+	(void)HAL_SPI_Init(&hspi1);
 }
 
 
