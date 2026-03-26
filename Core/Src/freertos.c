@@ -43,8 +43,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define CAN_HEATER_TX_TEST_MODE 1
-#define CAN_HEATER_TX_PERIOD_MS 100u
-/* 1 = 片内 bxCAN(hcan) + MCP2515(SPI) 各发一帧相同加热指令；0 = 仅片内 CAN */
+/* 1 = 片内 bxCAN + MCP2515 各发一帧相同加热指令；0 = 仅片内 CAN */
 #define CAN_HEATER_TX_TEST_DUAL_CONTROLLER 1
 
 /* USER CODE END PD */
@@ -71,14 +70,14 @@ const osThreadAttr_t defaultTask_attributes = {
 osThreadId_t NOx_DefaultHandle;
 const osThreadAttr_t NOx_Default_attributes = {
   .name = "NOx_Default",
-  .stack_size = 2048 * 4,
+  .stack_size = 1536 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ModBus_Slave */
 osThreadId_t ModBus_SlaveHandle;
 const osThreadAttr_t ModBus_Slave_attributes = {
   .name = "ModBus_Slave",
-  .stack_size = 2048 * 4,
+  .stack_size = 1536 * 4,
   .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for NOx_Receive */
@@ -117,7 +116,7 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 #if CAN_HEATER_TX_TEST_MODE
-  /* Test mode: initialize CAN/J1939 only, then periodic heater TX in default task. */
+  /* Test mode: initialize CAN/J1939 (+ optional MCP2515); defaultTask sends one heater frame at boot. */
   /* 片内控制器：J1939 → HAL_CAN / hcan（CAN1） */
   J1939_Initialization();
 #if CAN_HEATER_TX_TEST_DUAL_CONTROLLER
@@ -201,17 +200,12 @@ void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
 #if CAN_HEATER_TX_TEST_MODE
-  J1939_MESSAGE tx_msg;
-  TxMsg_Init(&tx_msg);
-#endif
-  /* Infinite loop */
-  for(;;)
+  /* 上电仅发送一帧加热指令（片内 CAN；可选再经 MCP2515 发相同帧） */
   {
-#if CAN_HEATER_TX_TEST_MODE
-    /* ① STM32 bxCAN（&hcan） */
+    J1939_MESSAGE tx_msg;
+    TxMsg_Init(&tx_msg);
     J1939_CAN_Transmit(&tx_msg);
 #if CAN_HEATER_TX_TEST_DUAL_CONTROLLER
-    /* ② MCP2515：与上相同 ID/数据，便于两路收发器分别用 LA 探针对比 */
     if (MCP2515_IsReady()) {
       MCP2515_CAN_Frame_t mcp_heater;
       mcp_heater.id = J1939_HEATER_CAN_ID;
@@ -223,7 +217,13 @@ void StartDefaultTask(void *argument)
       (void)MCP2515_Send(&mcp_heater);
     }
 #endif
-    vTaskDelay(pdMS_TO_TICKS(CAN_HEATER_TX_PERIOD_MS));
+  }
+#endif
+  /* Infinite loop */
+  for(;;)
+  {
+#if CAN_HEATER_TX_TEST_MODE
+    vTaskDelay(portMAX_DELAY);
 #else
     vTaskDelay(pdMS_TO_TICKS(100));
 #endif
