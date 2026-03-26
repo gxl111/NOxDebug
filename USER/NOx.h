@@ -18,6 +18,11 @@
 
 /* Parameter and sensor state come from nox_sensor.h */
 
+/* FreeRTOS 栈调试：Watch 窗口可直接添加 */
+extern volatile uint32_t g_nox_receive_stack_hwm;
+extern volatile uint32_t g_freertos_stack_overflow_hits;
+extern volatile char g_freertos_stack_overflow_task[];
+
 void TxMsg_Init(J1939_MESSAGE *TxMsgPtr);
 void hexArrayToString(const j1939_uint8_t *array, size_t length, char *result);
 

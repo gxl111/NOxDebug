@@ -5,6 +5,7 @@
  */
 #include "NOx.h"
 #include "FreeRTOS.h"
+#include "task.h"
 #include "queue.h"
 #include "modbus_slave.h"
 #include "modbus_flash.h"
@@ -33,6 +34,9 @@ static const uint8_t HeaterData[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 #define NOX_MCP2515_RX_ID      0x18F00F52u
 #define NOX_MCP2515_HEATER_ID  0x18FEDF55u
 #define NOX_MCP2515_BOOT_DEBUG 0
+
+/* Keil Watch：自任务启动以来「从未用到的栈」剩余量（单位：StackType_t 字），越小越危险；接近 0 应加大 NOx_Receive 栈 */
+volatile uint32_t g_nox_receive_stack_hwm = 0;
 
 SemaphoreHandle_t g_hVarMutex = NULL;
 
@@ -86,6 +90,8 @@ void NOxReceive(void *argument)
     TxMsg_Init(&TxMessage);
 
     for (;;) {
+        g_nox_receive_stack_hwm = (uint32_t)uxTaskGetStackHighWaterMark(NULL);
+
         if (xQueueReceive(Rx_QueueHandle, &item, pdMS_TO_TICKS(100)) == pdPASS) {
             NOx_HandleOne(&item.msg, item.channel_index);
         }
