@@ -3,7 +3,7 @@
 <title>Static Call Graph - [NOx_RCT6\NOx_RCT6.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image NOx_RCT6\NOx_RCT6.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Tue Mar 24 21:05:12 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Tue Mar 24 22:12:30 2026
 <BR><P>
 <H3>Maximum Stack Usage =       2080 bytes + Unknown(Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -330,7 +330,7 @@ Global Symbols
 
 <P><STRONG><a name="[22d]"></a>_ll_ushift_r</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, llushr.o(.text), UNUSED)
 
-<P><STRONG><a name="[122]"></a>__aeabi_memcpy</STRONG> (Thumb, 36 bytes, Stack size 0 bytes, memcpya.o(.text))
+<P><STRONG><a name="[123]"></a>__aeabi_memcpy</STRONG> (Thumb, 36 bytes, Stack size 0 bytes, memcpya.o(.text))
 <BR><BR>[Called By]<UL><LI><a href="#[1f5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;prvCopyDataToQueue
 <LI><a href="#[1f4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;prvCopyDataFromQueue
 <LI><a href="#[135]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MODS_SendWithCRC
@@ -933,8 +933,8 @@ Global Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[b0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
 </UL>
-<BR>[Called By]<UL><LI><a href="#[119]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_reset
-<LI><a href="#[11a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_enter_config
+<BR>[Called By]<UL><LI><a href="#[118]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_reset
+<LI><a href="#[119]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_enter_config
 <LI><a href="#[121]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Send
 <LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
 </UL>
@@ -975,7 +975,6 @@ Global Symbols
 <LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_I2C_MspInit
 <LI><a href="#[c1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_CAN_MspInit
 <LI><a href="#[150]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MX_GPIO_Init
-<LI><a href="#[118]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_gpio_init
 </UL>
 
 <P><STRONG><a name="[92]"></a>HAL_GPIO_WritePin</STRONG> (Thumb, 12 bytes, Stack size 0 bytes, stm32f1xx_hal_gpio.o(i.HAL_GPIO_WritePin))
@@ -989,12 +988,11 @@ Global Symbols
 <LI><a href="#[196]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;SD_sendcmd
 <LI><a href="#[197]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;SD_ReceiveData
 <LI><a href="#[195]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;SD_GETCSD
-<LI><a href="#[123]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_regs
-<LI><a href="#[11b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_reg
-<LI><a href="#[119]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_reset
+<LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_regs
+<LI><a href="#[11a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_reg
+<LI><a href="#[118]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_reset
 <LI><a href="#[1db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_read_regs
 <LI><a href="#[11e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_read_reg
-<LI><a href="#[118]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_gpio_init
 <LI><a href="#[120]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_bit_modify
 <LI><a href="#[121]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Send
 <LI><a href="#[8f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;BLOW_CONTROL
@@ -1167,7 +1165,7 @@ Global Symbols
 <LI><a href="#[e5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;SPI_EndRxTxTransaction
 </UL>
 <BR>[Called By]<UL><LI><a href="#[19a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_readwrite
-<LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
+<LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
 </UL>
 
 <P><STRONG><a name="[f2]"></a>HAL_TIMEx_BreakCallback</STRONG> (Thumb, 2 bytes, Stack size 0 bytes, stm32f1xx_hal_tim_ex.o(i.HAL_TIMEx_BreakCallback))
@@ -1406,15 +1404,15 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[58]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ModBusSlave
 </UL>
 
-<P><STRONG><a name="[117]"></a>MCP2515_Init</STRONG> (Thumb, 116 bytes, Stack size 16 bytes, mcp2515_spi_can.o(i.MCP2515_Init))
-<BR><BR>[Stack]<UL><LI>Max Depth = 168<LI>Call Chain = MCP2515_Init &rArr; mcp2515_set_normal &rArr; mcp2515_bit_modify &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
+<P><STRONG><a name="[117]"></a>MCP2515_Init</STRONG> (Thumb, 132 bytes, Stack size 16 bytes, mcp2515_spi_can.o(i.MCP2515_Init))
+<BR><BR>[Stack]<UL><LI>Max Depth = 176<LI>Call Chain = MCP2515_Init &rArr; mcp2515_verify_opmode &rArr; mcp2515_read_reg &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_Delay
-<LI><a href="#[11b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_reg
-<LI><a href="#[11c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_set_normal
-<LI><a href="#[119]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_reset
-<LI><a href="#[118]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_gpio_init
-<LI><a href="#[11a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_enter_config
+<LI><a href="#[11a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_reg
+<LI><a href="#[11c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_verify_opmode
+<LI><a href="#[11b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_set_normal
+<LI><a href="#[118]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_reset
+<LI><a href="#[119]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_enter_config
 </UL>
 <BR>[Called By]<UL><LI><a href="#[58]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ModBusSlave
 </UL>
@@ -1423,7 +1421,7 @@ Global Symbols
 <BR><BR>[Called By]<UL><LI><a href="#[59]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;NOxReceive
 </UL>
 
-<P><STRONG><a name="[11d]"></a>MCP2515_Receive</STRONG> (Thumb, 72 bytes, Stack size 16 bytes, mcp2515_spi_can.o(i.MCP2515_Receive))
+<P><STRONG><a name="[11d]"></a>MCP2515_Receive</STRONG> (Thumb, 80 bytes, Stack size 16 bytes, mcp2515_spi_can.o(i.MCP2515_Receive))
 <BR><BR>[Stack]<UL><LI>Max Depth = 200<LI>Call Chain = MCP2515_Receive &rArr; read_rxb_to_frame &rArr; mcp2515_read_regs &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[11f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;read_rxb_to_frame
@@ -1433,27 +1431,18 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[59]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;NOxReceive
 </UL>
 
-<P><STRONG><a name="[121]"></a>MCP2515_Send</STRONG> (Thumb, 204 bytes, Stack size 48 bytes, mcp2515_spi_can.o(i.MCP2515_Send))
-<BR><BR>[Stack]<UL><LI>Max Depth = 200<LI>Call Chain = MCP2515_Send &rArr; mcp2515_write_regs &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
+<P><STRONG><a name="[121]"></a>MCP2515_Send</STRONG> (Thumb, 222 bytes, Stack size 56 bytes, mcp2515_spi_can.o(i.MCP2515_Send))
+<BR><BR>[Stack]<UL><LI>Max Depth = 208<LI>Call Chain = MCP2515_Send &rArr; mcp2515_write_regs &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[92]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GPIO_WritePin
 <LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_Delay
-<LI><a href="#[122]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
-<LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
-<LI><a href="#[123]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_regs
+<LI><a href="#[123]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
+<LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
+<LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_regs
 <LI><a href="#[11e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_read_reg
+<LI><a href="#[122]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_id_to_regs
 </UL>
 <BR>[Called By]<UL><LI><a href="#[59]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;NOxReceive
-</UL>
-
-<P><STRONG><a name="[125]"></a>MCP2515_SetFilter</STRONG> (Thumb, 144 bytes, Stack size 48 bytes, mcp2515_spi_can.o(i.MCP2515_SetFilter))
-<BR><BR>[Stack]<UL><LI>Max Depth = 200<LI>Call Chain = MCP2515_SetFilter &rArr; mcp2515_set_normal &rArr; mcp2515_bit_modify &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
-</UL>
-<BR>[Calls]<UL><LI><a href="#[11b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_reg
-<LI><a href="#[11c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_set_normal
-<LI><a href="#[11a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_enter_config
-</UL>
-<BR>[Called By]<UL><LI><a href="#[58]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ModBusSlave
 </UL>
 
 <P><STRONG><a name="[12a]"></a>MODH_Poll</STRONG> (Thumb, 60 bytes, Stack size 8 bytes, modbus_host.o(i.MODH_Poll))
@@ -1520,7 +1509,7 @@ Global Symbols
 <LI><a href="#[141]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__NVIC_DisableIRQ
 <LI><a href="#[143]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MODS_RestartRxGapTimer
 <LI><a href="#[13e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MODS_AnalyzeApp
-<LI><a href="#[122]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
+<LI><a href="#[123]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
 <LI><a href="#[12b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;CRC16_Modbus
 </UL>
 <BR>[Called By]<UL><LI><a href="#[58]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ModBusSlave
@@ -1674,13 +1663,12 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> freertos.o(i.MX_FREERTOS_Init)
 </UL>
-<P><STRONG><a name="[58]"></a>ModBusSlave</STRONG> (Thumb, 96 bytes, Stack size 0 bytes, nox.o(i.ModBusSlave))
+<P><STRONG><a name="[58]"></a>ModBusSlave</STRONG> (Thumb, 84 bytes, Stack size 0 bytes, nox.o(i.ModBusSlave))
 <BR><BR>[Stack]<UL><LI>Max Depth = 688<LI>Call Chain = ModBusSlave &rArr; MODS_Poll &rArr; MODS_AnalyzeApp &rArr; MODS_03H &rArr; MODS_SendAckErr &rArr; MODS_SendWithCRC &rArr; RS485_Send_Data_IT &rArr; RS485_Enable_TX
 </UL>
 <BR>[Calls]<UL><LI><a href="#[100]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UART_Init
 <LI><a href="#[112]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xQueueGenericCreate
 <LI><a href="#[15e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;NoxChannel_Init
-<LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_SetFilter
 <LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
 <LI><a href="#[a0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Calibration_Init
 <LI><a href="#[8f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;BLOW_CONTROL
@@ -1720,7 +1708,7 @@ Global Symbols
 <BR>[Address Reference Count : 1]<UL><LI> freertos.o(i.MX_FREERTOS_Init)
 </UL>
 <P><STRONG><a name="[59]"></a>NOxReceive</STRONG> (Thumb, 304 bytes, Stack size 48 bytes, nox.o(i.NOxReceive))
-<BR><BR>[Stack]<UL><LI>Max Depth = 248<LI>Call Chain = NOxReceive &rArr; MCP2515_Send &rArr; mcp2515_write_regs &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
+<BR><BR>[Stack]<UL><LI>Max Depth = 256<LI>Call Chain = NOxReceive &rArr; MCP2515_Send &rArr; mcp2515_write_regs &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[15d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;vTaskDelay
 <LI><a href="#[163]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xQueueReceive
@@ -4022,7 +4010,7 @@ Local Symbols
 <P><STRONG><a name="[1f4]"></a>prvCopyDataFromQueue</STRONG> (Thumb, 42 bytes, Stack size 16 bytes, queue.o(i.prvCopyDataFromQueue))
 <BR><BR>[Stack]<UL><LI>Max Depth = 16<LI>Call Chain = prvCopyDataFromQueue
 </UL>
-<BR>[Calls]<UL><LI><a href="#[122]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
+<BR>[Calls]<UL><LI><a href="#[123]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
 </UL>
 <BR>[Called By]<UL><LI><a href="#[1de]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xQueueReceiveFromISR
 <LI><a href="#[163]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xQueueReceive
@@ -4032,7 +4020,7 @@ Local Symbols
 <BR><BR>[Stack]<UL><LI>Max Depth = 40<LI>Call Chain = prvCopyDataToQueue &rArr; xTaskPriorityDisinherit
 </UL>
 <BR>[Calls]<UL><LI><a href="#[1f6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xTaskPriorityDisinherit
-<LI><a href="#[122]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
+<LI><a href="#[123]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
 </UL>
 <BR>[Called By]<UL><LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xQueueGenericSendFromISR
 <LI><a href="#[15b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xQueueGenericSend
@@ -4436,7 +4424,7 @@ Local Symbols
 <BR>[Calls]<UL><LI><a href="#[146]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xQueueGiveFromISR
 <LI><a href="#[142]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__NVIC_EnableIRQ
 <LI><a href="#[141]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__NVIC_DisableIRQ
-<LI><a href="#[122]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
+<LI><a href="#[123]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> modbus_slave.o(i.MODS_RestartRxGapTimer)
 </UL>
@@ -4466,7 +4454,7 @@ Local Symbols
 <P><STRONG><a name="[135]"></a>MODS_SendWithCRC</STRONG> (Thumb, 62 bytes, Stack size 280 bytes, modbus_slave.o(i.MODS_SendWithCRC))
 <BR><BR>[Stack]<UL><LI>Max Depth = 312<LI>Call Chain = MODS_SendWithCRC &rArr; RS485_Send_Data_IT &rArr; RS485_Enable_TX
 </UL>
-<BR>[Calls]<UL><LI><a href="#[122]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
+<BR>[Calls]<UL><LI><a href="#[123]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
 <LI><a href="#[12b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;CRC16_Modbus
 <LI><a href="#[147]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;RS485_Send_Data_IT
 </UL>
@@ -4561,40 +4549,37 @@ Local Symbols
 <BR><BR>[Stack]<UL><LI>Max Depth = 144<LI>Call Chain = mcp2515_bit_modify &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[92]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GPIO_WritePin
-<LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
+<LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
 </UL>
-<BR>[Called By]<UL><LI><a href="#[11c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_set_normal
-<LI><a href="#[11a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_enter_config
+<BR>[Called By]<UL><LI><a href="#[11b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_set_normal
+<LI><a href="#[119]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_enter_config
 <LI><a href="#[11d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Receive
 </UL>
 
-<P><STRONG><a name="[11a]"></a>mcp2515_enter_config</STRONG> (Thumb, 44 bytes, Stack size 8 bytes, mcp2515_spi_can.o(i.mcp2515_enter_config))
+<P><STRONG><a name="[119]"></a>mcp2515_enter_config</STRONG> (Thumb, 44 bytes, Stack size 8 bytes, mcp2515_spi_can.o(i.mcp2515_enter_config))
 <BR><BR>[Stack]<UL><LI>Max Depth = 152<LI>Call Chain = mcp2515_enter_config &rArr; mcp2515_read_reg &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_Delay
 <LI><a href="#[11e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_read_reg
 <LI><a href="#[120]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_bit_modify
 </UL>
-<BR>[Called By]<UL><LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_SetFilter
-<LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
+<BR>[Called By]<UL><LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
 </UL>
 
-<P><STRONG><a name="[118]"></a>mcp2515_gpio_init</STRONG> (Thumb, 102 bytes, Stack size 24 bytes, mcp2515_spi_can.o(i.mcp2515_gpio_init))
-<BR><BR>[Stack]<UL><LI>Max Depth = 60<LI>Call Chain = mcp2515_gpio_init &rArr; HAL_GPIO_Init
+<P><STRONG><a name="[122]"></a>mcp2515_id_to_regs</STRONG> (Thumb, 62 bytes, Stack size 20 bytes, mcp2515_spi_can.o(i.mcp2515_id_to_regs))
+<BR><BR>[Stack]<UL><LI>Max Depth = 20<LI>Call Chain = mcp2515_id_to_regs
 </UL>
-<BR>[Calls]<UL><LI><a href="#[92]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GPIO_WritePin
-<LI><a href="#[c2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GPIO_Init
-</UL>
-<BR>[Called By]<UL><LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
+<BR>[Called By]<UL><LI><a href="#[121]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Send
 </UL>
 
 <P><STRONG><a name="[11e]"></a>mcp2515_read_reg</STRONG> (Thumb, 50 bytes, Stack size 16 bytes, mcp2515_spi_can.o(i.mcp2515_read_reg))
 <BR><BR>[Stack]<UL><LI>Max Depth = 144<LI>Call Chain = mcp2515_read_reg &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[92]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GPIO_WritePin
-<LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
+<LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
 </UL>
-<BR>[Called By]<UL><LI><a href="#[11a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_enter_config
+<BR>[Called By]<UL><LI><a href="#[11c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_verify_opmode
+<LI><a href="#[119]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_enter_config
 <LI><a href="#[121]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Send
 <LI><a href="#[11d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Receive
 </UL>
@@ -4603,45 +4588,51 @@ Local Symbols
 <BR><BR>[Stack]<UL><LI>Max Depth = 152<LI>Call Chain = mcp2515_read_regs &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[92]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GPIO_WritePin
-<LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
+<LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
 </UL>
 <BR>[Called By]<UL><LI><a href="#[11f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;read_rxb_to_frame
 </UL>
 
-<P><STRONG><a name="[119]"></a>mcp2515_reset</STRONG> (Thumb, 38 bytes, Stack size 8 bytes, mcp2515_spi_can.o(i.mcp2515_reset))
+<P><STRONG><a name="[118]"></a>mcp2515_reset</STRONG> (Thumb, 38 bytes, Stack size 8 bytes, mcp2515_spi_can.o(i.mcp2515_reset))
 <BR><BR>[Stack]<UL><LI>Max Depth = 136<LI>Call Chain = mcp2515_reset &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[92]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GPIO_WritePin
 <LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_Delay
-<LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
+<LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
 </UL>
 <BR>[Called By]<UL><LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
 </UL>
 
-<P><STRONG><a name="[11c]"></a>mcp2515_set_normal</STRONG> (Thumb, 14 bytes, Stack size 8 bytes, mcp2515_spi_can.o(i.mcp2515_set_normal))
+<P><STRONG><a name="[11b]"></a>mcp2515_set_normal</STRONG> (Thumb, 14 bytes, Stack size 8 bytes, mcp2515_spi_can.o(i.mcp2515_set_normal))
 <BR><BR>[Stack]<UL><LI>Max Depth = 152<LI>Call Chain = mcp2515_set_normal &rArr; mcp2515_bit_modify &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[120]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_bit_modify
 </UL>
-<BR>[Called By]<UL><LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_SetFilter
-<LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
+<BR>[Called By]<UL><LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
 </UL>
 
-<P><STRONG><a name="[11b]"></a>mcp2515_write_reg</STRONG> (Thumb, 48 bytes, Stack size 16 bytes, mcp2515_spi_can.o(i.mcp2515_write_reg))
+<P><STRONG><a name="[11c]"></a>mcp2515_verify_opmode</STRONG> (Thumb, 30 bytes, Stack size 16 bytes, mcp2515_spi_can.o(i.mcp2515_verify_opmode))
+<BR><BR>[Stack]<UL><LI>Max Depth = 160<LI>Call Chain = mcp2515_verify_opmode &rArr; mcp2515_read_reg &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
+</UL>
+<BR>[Calls]<UL><LI><a href="#[11e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_read_reg
+</UL>
+<BR>[Called By]<UL><LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
+</UL>
+
+<P><STRONG><a name="[11a]"></a>mcp2515_write_reg</STRONG> (Thumb, 48 bytes, Stack size 16 bytes, mcp2515_spi_can.o(i.mcp2515_write_reg))
 <BR><BR>[Stack]<UL><LI>Max Depth = 144<LI>Call Chain = mcp2515_write_reg &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[92]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GPIO_WritePin
-<LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
+<LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
 </UL>
-<BR>[Called By]<UL><LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_SetFilter
-<LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
+<BR>[Called By]<UL><LI><a href="#[117]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Init
 </UL>
 
-<P><STRONG><a name="[123]"></a>mcp2515_write_regs</STRONG> (Thumb, 66 bytes, Stack size 24 bytes, mcp2515_spi_can.o(i.mcp2515_write_regs))
+<P><STRONG><a name="[124]"></a>mcp2515_write_regs</STRONG> (Thumb, 66 bytes, Stack size 24 bytes, mcp2515_spi_can.o(i.mcp2515_write_regs))
 <BR><BR>[Stack]<UL><LI>Max Depth = 152<LI>Call Chain = mcp2515_write_regs &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[92]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GPIO_WritePin
-<LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
+<LI><a href="#[125]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;spi_xfer_byte
 </UL>
 <BR>[Called By]<UL><LI><a href="#[121]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Send
 </UL>
@@ -4649,20 +4640,20 @@ Local Symbols
 <P><STRONG><a name="[11f]"></a>read_rxb_to_frame</STRONG> (Thumb, 126 bytes, Stack size 32 bytes, mcp2515_spi_can.o(i.read_rxb_to_frame))
 <BR><BR>[Stack]<UL><LI>Max Depth = 184<LI>Call Chain = read_rxb_to_frame &rArr; mcp2515_read_regs &rArr; spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
-<BR>[Calls]<UL><LI><a href="#[122]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
+<BR>[Calls]<UL><LI><a href="#[123]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
 <LI><a href="#[1db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_read_regs
 </UL>
 <BR>[Called By]<UL><LI><a href="#[11d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MCP2515_Receive
 </UL>
 
-<P><STRONG><a name="[124]"></a>spi_xfer_byte</STRONG> (Thumb, 28 bytes, Stack size 16 bytes, mcp2515_spi_can.o(i.spi_xfer_byte))
+<P><STRONG><a name="[125]"></a>spi_xfer_byte</STRONG> (Thumb, 38 bytes, Stack size 16 bytes, mcp2515_spi_can.o(i.spi_xfer_byte))
 <BR><BR>[Stack]<UL><LI>Max Depth = 128<LI>Call Chain = spi_xfer_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_EndRxTxTransaction &rArr; SPI_WaitFlagStateUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[e4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_SPI_TransmitReceive
 </UL>
-<BR>[Called By]<UL><LI><a href="#[123]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_regs
-<LI><a href="#[11b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_reg
-<LI><a href="#[119]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_reset
+<BR>[Called By]<UL><LI><a href="#[124]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_regs
+<LI><a href="#[11a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_write_reg
+<LI><a href="#[118]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_reset
 <LI><a href="#[1db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_read_regs
 <LI><a href="#[11e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_read_reg
 <LI><a href="#[120]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mcp2515_bit_modify

@@ -199,7 +199,7 @@ void ModBusSlave(void *argument)
     NoxChannel_Init();
     /* 第二路 CAN（MCP2515）：250 kbps；硬件滤波目标 PGN+F0 SA52（失败则保持 Init 的“收全部”，由 NOxReceive 再过滤） */
     if (MCP2515_Init(MCP2515_BAUD_250K) == 0)
-        (void)MCP2515_SetFilter(NOX_MCP2515_RX_ID, 0x1FFFFFFFu, true);
+        //(void)MCP2515_SetFilter(NOX_MCP2515_RX_ID, 0x1FFFFFFFu, true);
     MDSUARTx.Init.BaudRate = (uint32_t)SBAUD485;
     HAL_UART_Init(&MDSUARTx);
     MODRx_SemaphoreHandle = xSemaphoreCreateBinary();
