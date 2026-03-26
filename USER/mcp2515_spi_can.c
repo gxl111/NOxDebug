@@ -31,6 +31,8 @@
 #define MCP2515_CANINTE  0x2B
 #define MCP2515_CANINTF  0x2C
 #define MCP2515_EFLG     0x2D
+#define MCP2515_TEC      0x1C
+#define MCP2515_REC      0x1D
 /* TXB0 */
 #define MCP2515_TXB0CTRL 0x30
 #define MCP2515_TXB0SIDH 0x31
@@ -66,6 +68,7 @@
 #define MCP2515_RXM0EID0 0x23
 
 #define MCP2515_REQOP_CONFIG 0x80
+#define MCP2515_REQOP_LOOPBACK 0x40
 #define MCP2515_REQOP_NORMAL 0x00
 #define MCP2515_OPMODE_MASK  0xE0
 #define MCP2515_TXB0_READY   0x00
@@ -358,6 +361,85 @@ int MCP2515_SetFilter(uint32_t id, uint32_t mask, bool ext)
 	HAL_Delay(1);
 	if (mcp2515_verify_opmode(MCP2515_REQOP_NORMAL) != 0)
 		return -2;
+
+	return 0;
+}
+
+int MCP2515_DebugReadCore(uint8_t *canstat, uint8_t *canctrl, uint8_t *cnf1, uint8_t *cnf2,
+			  uint8_t *cnf3, uint8_t *canintf, uint8_t *eflg, uint8_t *tec, uint8_t *rec)
+{
+	if (canstat == NULL || canctrl == NULL || cnf1 == NULL || cnf2 == NULL
+		|| cnf3 == NULL || canintf == NULL || eflg == NULL || tec == NULL || rec == NULL)
+		return -1;
+
+	*canstat = mcp2515_read_reg(MCP2515_CANSTAT);
+	*canctrl = mcp2515_read_reg(MCP2515_CANCTRL);
+	*cnf1 = mcp2515_read_reg(MCP2515_CNF1);
+	*cnf2 = mcp2515_read_reg(MCP2515_CNF2);
+	*cnf3 = mcp2515_read_reg(MCP2515_CNF3);
+	*canintf = mcp2515_read_reg(MCP2515_CANINTF);
+	*eflg = mcp2515_read_reg(MCP2515_EFLG);
+	*tec = mcp2515_read_reg(MCP2515_TEC);
+	*rec = mcp2515_read_reg(MCP2515_REC);
+	return 0;
+}
+
+int MCP2515_LoopbackSelfTest(void)
+{
+	MCP2515_CAN_Frame_t tx = {0};
+	MCP2515_CAN_Frame_t rx = {0};
+	uint32_t t;
+
+	/* -1: 无法进入配置模式 */
+	if (mcp2515_enter_config() != 0)
+		return -1;
+
+	/* 进入 loopback 模式（REQOP=100） */
+	mcp2515_bit_modify(MCP2515_CANCTRL, MCP2515_OPMODE_MASK, MCP2515_REQOP_LOOPBACK);
+	HAL_Delay(1);
+	/* -2: 未能确认进入 loopback */
+	if (mcp2515_verify_opmode(MCP2515_REQOP_LOOPBACK) != 0)
+		return -2;
+
+	/* 清接收中断标志，避免历史状态干扰 */
+	mcp2515_bit_modify(MCP2515_CANINTF, MCP2515_CANINTF_RX0IF | MCP2515_CANINTF_RX1IF, 0);
+
+	tx.id = 0x18FEDF55u;
+	tx.is_ext_id = true;
+	tx.len = 8;
+	tx.data[0] = 0xA5u;
+	tx.data[1] = 0x5Au;
+	tx.data[2] = 0x11u;
+	tx.data[3] = 0x22u;
+	tx.data[4] = 0x33u;
+	tx.data[5] = 0x44u;
+	tx.data[6] = 0x55u;
+	tx.data[7] = 0x66u;
+
+	/* -3: 发送失败 */
+	if (MCP2515_Send(&tx) != 0)
+		return -3;
+
+	/* 等待 loopback 收到帧 */
+	for (t = 0; t < 20u; t++) {
+		if (MCP2515_Receive(&rx) == 1)
+			break;
+		HAL_Delay(1);
+	}
+	/* -4: loopback 未收到 */
+	if (t >= 20u)
+		return -4;
+
+	/* -5: 收到但内容不一致 */
+	if (!rx.is_ext_id || rx.id != tx.id || rx.len != tx.len || memcmp(rx.data, tx.data, tx.len) != 0)
+		return -5;
+
+	/* 恢复 normal 模式 */
+	mcp2515_set_normal();
+	HAL_Delay(1);
+	/* -6: 未能恢复 normal */
+	if (mcp2515_verify_opmode(MCP2515_REQOP_NORMAL) != 0)
+		return -6;
 
 	return 0;
 }

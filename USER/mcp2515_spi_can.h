@@ -76,6 +76,28 @@ bool MCP2515_HasInterrupt(void);
  */
 int MCP2515_SetFilter(uint32_t id, uint32_t mask, bool ext);
 
+/**
+ * @brief 调试读取关键寄存器（可用于排查 SPI/时序/模式）
+ * @param canstat  CANSTAT(0x0E)
+ * @param canctrl  CANCTRL(0x0F)
+ * @param cnf1     CNF1(0x2A)
+ * @param cnf2     CNF2(0x29)
+ * @param cnf3     CNF3(0x28)
+ * @param canintf  CANINTF(0x2C)
+ * @param eflg     EFLG(0x2D)
+ * @param tec      TEC(0x1C)
+ * @param rec      REC(0x1D)
+ * @return 0 成功；-1 参数为空
+ */
+int MCP2515_DebugReadCore(uint8_t *canstat, uint8_t *canctrl, uint8_t *cnf1, uint8_t *cnf2,
+			  uint8_t *cnf3, uint8_t *canintf, uint8_t *eflg, uint8_t *tec, uint8_t *rec);
+
+/**
+ * @brief 回环自检：切到 Loopback，发一帧并尝试收回，再恢复 Normal
+ * @return 0 成功；负值失败（见实现注释）
+ */
+int MCP2515_LoopbackSelfTest(void);
+
 #ifdef __cplusplus
 }
 #endif
