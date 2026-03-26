@@ -29,7 +29,9 @@
 #include <string.h>
 #include <stdio.h>
 #include "NOx.h"
+#if NOX_USE_MCP2515
 #include "mcp2515_spi_can.h"
+#endif
 // #include "oled.h"  /* OLED 已禁用 */
 #include "sdcard.h"
 #include "modbus_slave.h"
@@ -42,7 +44,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/* 1 = 仅跑 defaultTask：上电延时后片内 CAN 与 MCP2515 各发一帧加热指令，之后不再发 CAN */
+/* 1 = 仅跑 defaultTask：延时后发加热帧（片内 CAN；NOX_USE_MCP2515 时再经 MCP2515 发一帧） */
 #define CAN_HEATER_TX_TEST_MODE 1
 #define CAN_HEATER_TX_TEST_DELAY_MS 5000u
 
@@ -117,7 +119,9 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 #if CAN_HEATER_TX_TEST_MODE
   J1939_Initialization();
+#if NOX_USE_MCP2515
   (void)MCP2515_Init(MCP2515_BAUD_250K);
+#endif
 #else
   // OLED_Init();
   // OLED_PrintASCIIString(0, 30, "waiting sd ", &afont16x8, OLED_COLOR_REVERSED);
@@ -200,6 +204,7 @@ void StartDefaultTask(void *argument)
     J1939_MESSAGE tx_msg;
     TxMsg_Init(&tx_msg);
     J1939_CAN_Transmit(&tx_msg);
+#if NOX_USE_MCP2515
     if (MCP2515_IsReady()) {
       MCP2515_CAN_Frame_t mcp_heater;
       mcp_heater.id = J1939_HEATER_CAN_ID;
@@ -210,6 +215,7 @@ void StartDefaultTask(void *argument)
       }
       (void)MCP2515_Send(&mcp_heater);
     }
+#endif
   }
 #endif
   /* Infinite loop */

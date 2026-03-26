@@ -48,9 +48,12 @@
 #define J1939_HEATER_CAN_ID    0x18FEDF55u
 #define J1939_HEATER_PAYLOAD_TAIL  0x55u
 
+/* 0 = 完全禁用 MCP2515（不初始化、不收发）；1 = 使能第二路 SPI-CAN */
+#define NOX_USE_MCP2515        0
+
 /* Multi-sensor: max channels (for future 3-way extension) */
 #define NOX_SENSOR_COUNT_MAX   3u
-/* Current number of sensors: ch0=CAN1 SA 0x52, ch1=CAN1 SA 0x51, ch2=CAN2(MCP2515) SA 0x52 */
+/* Current number of sensors: ch0=CAN1 SA 0x52, ch1=CAN1 SA 0x51；ch2 仅当 NOX_USE_MCP2515 时为 MCP2515 */
 #define NOX_SENSOR_COUNT       3u
 /* Source addresses per channel: [0]=0x52 outlet, [1]=0x51 inlet, [2]=0x52 second CAN */
 #define NOX_SENSOR_SA_LIST     { 0x52u, 0x51u, 0x52u }
