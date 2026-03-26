@@ -41,6 +41,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define CAN_HEATER_TX_TEST_MODE 1
+#define CAN_HEATER_TX_PERIOD_MS 100u
 
 /* USER CODE END PD */
 
@@ -111,6 +113,10 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
+#if CAN_HEATER_TX_TEST_MODE
+  /* Test mode: initialize CAN/J1939 only, then periodic heater TX in default task. */
+  J1939_Initialization();
+#else
   // OLED_Init();
   // OLED_PrintASCIIString(0, 30, "waiting sd ", &afont16x8, OLED_COLOR_REVERSED);
   // OLED_ShowFrame();
@@ -126,6 +132,7 @@ void MX_FREERTOS_Init(void) {
 //  HAL_CAN_Start(&hcan);
 //  
 //  HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
+#endif
     
   
 
@@ -151,6 +158,7 @@ void MX_FREERTOS_Init(void) {
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
+#if !CAN_HEATER_TX_TEST_MODE
   /* creation of NOx_Default */
   NOx_DefaultHandle = osThreadNew(NOxDefault, NULL, &NOx_Default_attributes);
 
@@ -162,6 +170,7 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of ModBus_Host */
   ModBus_HostHandle = osThreadNew(ModBusHost, NULL, &ModBus_Host_attributes);
+#endif
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -183,11 +192,19 @@ void MX_FREERTOS_Init(void) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
+#if CAN_HEATER_TX_TEST_MODE
+  J1939_MESSAGE tx_msg;
+  TxMsg_Init(&tx_msg);
+#endif
   /* Infinite loop */
   for(;;)
   {
-
+#if CAN_HEATER_TX_TEST_MODE
+    J1939_CAN_Transmit(&tx_msg);
+    vTaskDelay(pdMS_TO_TICKS(CAN_HEATER_TX_PERIOD_MS));
+#else
     vTaskDelay(pdMS_TO_TICKS(100));
+#endif
   }
   /* USER CODE END StartDefaultTask */
 }
