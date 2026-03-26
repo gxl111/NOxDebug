@@ -42,9 +42,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+/* 1 = 仅跑 defaultTask：上电延时后片内 CAN 与 MCP2515 各发一帧加热指令，之后不再发 CAN */
 #define CAN_HEATER_TX_TEST_MODE 1
-/* 1 = 片内 bxCAN + MCP2515 各发一帧相同加热指令；0 = 仅片内 CAN */
-#define CAN_HEATER_TX_TEST_DUAL_CONTROLLER 1
+#define CAN_HEATER_TX_TEST_DELAY_MS 5000u
 
 /* USER CODE END PD */
 
@@ -116,13 +116,8 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 #if CAN_HEATER_TX_TEST_MODE
-  /* Test mode: initialize CAN/J1939 (+ optional MCP2515); defaultTask sends one heater frame at boot. */
-  /* 片内控制器：J1939 → HAL_CAN / hcan（CAN1） */
   J1939_Initialization();
-#if CAN_HEATER_TX_TEST_DUAL_CONTROLLER
-  /* 外置控制器：MCP2515 + SPI2，波特率与现场 J1939 一致 250k */
   (void)MCP2515_Init(MCP2515_BAUD_250K);
-#endif
 #else
   // OLED_Init();
   // OLED_PrintASCIIString(0, 30, "waiting sd ", &afont16x8, OLED_COLOR_REVERSED);
@@ -200,12 +195,11 @@ void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
 #if CAN_HEATER_TX_TEST_MODE
-  /* 上电仅发送一帧加热指令（片内 CAN；可选再经 MCP2515 发相同帧） */
+  vTaskDelay(pdMS_TO_TICKS(CAN_HEATER_TX_TEST_DELAY_MS));
   {
     J1939_MESSAGE tx_msg;
     TxMsg_Init(&tx_msg);
     J1939_CAN_Transmit(&tx_msg);
-#if CAN_HEATER_TX_TEST_DUAL_CONTROLLER
     if (MCP2515_IsReady()) {
       MCP2515_CAN_Frame_t mcp_heater;
       mcp_heater.id = J1939_HEATER_CAN_ID;
@@ -216,7 +210,6 @@ void StartDefaultTask(void *argument)
       }
       (void)MCP2515_Send(&mcp_heater);
     }
-#endif
   }
 #endif
   /* Infinite loop */
