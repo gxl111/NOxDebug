@@ -66,21 +66,21 @@ const osThreadAttr_t defaultTask_attributes = {
 osThreadId_t NOx_DefaultHandle;
 const osThreadAttr_t NOx_Default_attributes = {
   .name = "NOx_Default",
-  .stack_size = 256 * 4,
+  .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ModBus_Slave */
 osThreadId_t ModBus_SlaveHandle;
 const osThreadAttr_t ModBus_Slave_attributes = {
   .name = "ModBus_Slave",
-  .stack_size = 256 * 4,
+  .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for NOx_Receive */
 osThreadId_t NOx_ReceiveHandle;
 const osThreadAttr_t NOx_Receive_attributes = {
   .name = "NOx_Receive",
-  .stack_size = 256 * 4,
+  .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ModBus_Host */
@@ -266,6 +266,27 @@ __weak void ModBusHost(void *argument)
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
+
+/* 栈溢出时由内核调用：在 Keil 对函数第一行打断点，或 Watch g_freertos_stack_overflow_hits / g_freertos_stack_overflow_task */
+volatile uint32_t g_freertos_stack_overflow_hits = 0;
+volatile char g_freertos_stack_overflow_task[configMAX_TASK_NAME_LEN] = {0};
+
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
+{
+	(void)xTask;
+	g_freertos_stack_overflow_hits++;
+	if (pcTaskName != NULL) {
+		strncpy((char *)g_freertos_stack_overflow_task, pcTaskName,
+			sizeof(g_freertos_stack_overflow_task) - 1U);
+		g_freertos_stack_overflow_task[sizeof(g_freertos_stack_overflow_task) - 1U] = '\0';
+	} else {
+		g_freertos_stack_overflow_task[0] = '\0';
+	}
+	taskDISABLE_INTERRUPTS();
+	for (;;) {
+		/* 停在此处便于查看调用栈与上面全局变量 */
+	}
+}
 
 /* USER CODE END Application */
 
