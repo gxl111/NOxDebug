@@ -84,9 +84,12 @@
 #define MCP2515_CANINTE_RX0IE    0x01
 #define MCP2515_CANINTE_RX1IE    0x02
 
-/* 16 MHz 晶振下常用波特率：CNF1, CNF2, CNF3 (BRP, SYNC+PHSEG1, PHSEG2) */
+/* 板级原理图为 MCP2515 外挂 8 MHz 晶振。
+ * 说明：现网仅使用 250 kbps（J1939）。此处将 250k 映射到经验证可工作的
+ * 寄存器组（原 16MHz 表中的 500k 组，在 8MHz 下等效 250k）。
+ */
 static const uint8_t cnf_125k[]  = { 0x03, 0xFA, 0x87 }; /* 125 kbps */
-static const uint8_t cnf_250k[]  = { 0x00, 0xF4, 0x06 }; /* 250 kbps, 32 Tq */
+static const uint8_t cnf_250k[]  = { 0x00, 0xFA, 0x06 }; /* 8MHz 晶振下等效 250 kbps */
 static const uint8_t cnf_500k[]  = { 0x00, 0xFA, 0x06 }; /* 500 kbps, 16 Tq */
 static const uint8_t cnf_1000k[] = { 0x00, 0xD0, 0x82 }; /* 1 Mbps */
 
