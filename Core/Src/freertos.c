@@ -29,6 +29,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "NOx.h"
+#include "mcp2515_spi_can.h"
 // #include "oled.h"  /* OLED 已禁用 */
 #include "sdcard.h"
 #include "modbus_slave.h"
@@ -43,6 +44,8 @@
 /* USER CODE BEGIN PD */
 #define CAN_HEATER_TX_TEST_MODE 1
 #define CAN_HEATER_TX_PERIOD_MS 100u
+/* 1 = 片内 bxCAN(hcan) + MCP2515(SPI) 各发一帧相同加热指令；0 = 仅片内 CAN */
+#define CAN_HEATER_TX_TEST_DUAL_CONTROLLER 1
 
 /* USER CODE END PD */
 
@@ -115,7 +118,12 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 #if CAN_HEATER_TX_TEST_MODE
   /* Test mode: initialize CAN/J1939 only, then periodic heater TX in default task. */
+  /* 片内控制器：J1939 → HAL_CAN / hcan（CAN1） */
   J1939_Initialization();
+#if CAN_HEATER_TX_TEST_DUAL_CONTROLLER
+  /* 外置控制器：MCP2515 + SPI2，波特率与现场 J1939 一致 250k */
+  (void)MCP2515_Init(MCP2515_BAUD_250K);
+#endif
 #else
   // OLED_Init();
   // OLED_PrintASCIIString(0, 30, "waiting sd ", &afont16x8, OLED_COLOR_REVERSED);
@@ -200,7 +208,21 @@ void StartDefaultTask(void *argument)
   for(;;)
   {
 #if CAN_HEATER_TX_TEST_MODE
+    /* ① STM32 bxCAN（&hcan） */
     J1939_CAN_Transmit(&tx_msg);
+#if CAN_HEATER_TX_TEST_DUAL_CONTROLLER
+    /* ② MCP2515：与上相同 ID/数据，便于两路收发器分别用 LA 探针对比 */
+    if (MCP2515_IsReady()) {
+      MCP2515_CAN_Frame_t mcp_heater;
+      mcp_heater.id = J1939_HEATER_CAN_ID;
+      mcp_heater.is_ext_id = true;
+      mcp_heater.len = 8;
+      for (int i = 0; i < 8; i++) {
+        mcp_heater.data[i] = tx_msg.Mxe.Data[i];
+      }
+      (void)MCP2515_Send(&mcp_heater);
+    }
+#endif
     vTaskDelay(pdMS_TO_TICKS(CAN_HEATER_TX_PERIOD_MS));
 #else
     vTaskDelay(pdMS_TO_TICKS(100));
