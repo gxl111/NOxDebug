@@ -116,8 +116,12 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 #if CAN_HEATER_TX_TEST_MODE
-  J1939_Initialization();
-  (void)MCP2515_Init(MCP2515_BAUD_250K);
+  /*
+   * CAN/MCP 初始化放在 StartDefaultTask 里（调度器已运行后再做）。
+   * 原因：若放在此处，J1939_Initialization 里已 Start CAN，RX 中断可能在
+   * vTaskStartScheduler 之前进 FromISR；且 MCP2515_Init 里 HAL_Delay 依赖 TIM6，
+   * 任一环节卡死都会表现为「永远进不了 StartDefaultTask」（其实尚未 osThreadNew）。
+   */
 #else
   // OLED_Init();
   // OLED_PrintASCIIString(0, 30, "waiting sd ", &afont16x8, OLED_COLOR_REVERSED);
@@ -159,6 +163,7 @@ void MX_FREERTOS_Init(void) {
   /* Create the thread(s) */
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  configASSERT(defaultTaskHandle != NULL);
 
 #if !CAN_HEATER_TX_TEST_MODE
   /* creation of NOx_Default */
@@ -195,6 +200,8 @@ void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
 #if CAN_HEATER_TX_TEST_MODE
+  J1939_Initialization();
+  (void)MCP2515_Init(MCP2515_BAUD_250K);
   J1939_MESSAGE tx_msg;
   TxMsg_Init(&tx_msg);
 #endif
