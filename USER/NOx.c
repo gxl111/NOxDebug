@@ -17,9 +17,7 @@
 #include "app_config.h"
 #include "nox_channel.h"
 #include "J1939.H"
-#if NOX_USE_MCP2515
 #include "mcp2515_spi_can.h"
-#endif
 
 extern uint32_t time_1s;
 
@@ -31,12 +29,10 @@ static J1939_MESSAGE TxMessage;
 /* Heater payload: Byte7 = ATI1|ATO1|ATI2|ATO2 dew point (0x55 = both banks). */
 static const uint8_t HeaterData[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, J1939_HEATER_PAYLOAD_TAIL };
 
-#if NOX_USE_MCP2515
-/* 第二路 CAN（MCP2515）J1939 扩展帧 29 位 ID */
+/* 第二路 CAN（MCP2515）J1939 扩展帧 29 位 ID，与 J1939.c 中 Array[0..3] 大端打包一致 */
 #define NOX_MCP2515_RX_ID      0x18F00F52u
 #define NOX_MCP2515_HEATER_ID  0x18FEDF55u
 #define NOX_MCP2515_BOOT_DEBUG 0
-#endif
 
 SemaphoreHandle_t g_hVarMutex = NULL;
 
@@ -93,8 +89,7 @@ void NOxReceive(void *argument)
         if (xQueueReceive(Rx_QueueHandle, &item, pdMS_TO_TICKS(100)) == pdPASS) {
             NOx_HandleOne(&item.msg, item.channel_index);
         }
-#if NOX_USE_MCP2515
-        /* 第二路 CAN（MCP2515）接收：SA 0x52 → 通道 2 */
+        /* 第二路 CAN（MCP2515）接收：SA 0x52 → 通道 2（Electrical Interface 18F00F52h） */
         if (MCP2515_IsReady()) {
             MCP2515_CAN_Frame_t rx;
             while (MCP2515_Receive(&rx) == 1) {
@@ -112,7 +107,6 @@ void NOxReceive(void *argument)
                 }
             }
         }
-#endif
 
         /* P34: mode 0 single (high byte = ch), mode 1 主从 (high byte = 主 ch), mode 2 fusion (no 主). */
         {
@@ -156,9 +150,8 @@ void NOxReceive(void *argument)
         }
 #endif
 
-        /* Heater command: 片内 CAN；NOX_USE_MCP2515 时 MCP2515 同步发 18FEDF55 */
+        /* Heater command: 第一路 CAN 发送；第二路 CAN（MCP2515）也发送 18FEDF55（文档 4.2 节）. */
         J1939_CAN_Transmit(&TxMessage);
-#if NOX_USE_MCP2515
         if (MCP2515_IsReady()) {
             MCP2515_CAN_Frame_t heater;
             heater.id = NOX_MCP2515_HEATER_ID;
@@ -168,7 +161,6 @@ void NOxReceive(void *argument)
                 heater.data[i] = HeaterData[i];
             (void)MCP2515_Send(&heater);
         }
-#endif
 
         vTaskDelay(pdMS_TO_TICKS(50));
     }
@@ -206,7 +198,7 @@ void ModBusSlave(void *argument)
     BLOW_CONTROL(0, 0);
     BLOW_CONTROL(1, 0);
     NoxChannel_Init();
-#if NOX_USE_MCP2515
+    /* 第二路 CAN（MCP2515）：250 kbps；硬件滤波目标 PGN+F0 SA52 */
     if (MCP2515_Init(MCP2515_BAUD_250K) == 0) {
 #if NOX_MCP2515_BOOT_DEBUG
         uint8_t canstat = 0, canctrl = 0, cnf1 = 0, cnf2 = 0, cnf3 = 0;
@@ -218,9 +210,9 @@ void ModBusSlave(void *argument)
         (void)canstat; (void)canctrl; (void)cnf1; (void)cnf2; (void)cnf3;
         (void)canintf; (void)eflg; (void)tec; (void)rec;
 #endif
+
         (void)MCP2515_SetFilter(NOX_MCP2515_RX_ID, 0x1FFFFFFFu, true);
     }
-#endif
     MDSUARTx.Init.BaudRate = (uint32_t)SBAUD485;
     HAL_UART_Init(&MDSUARTx);
     MODRx_SemaphoreHandle = xSemaphoreCreateBinary();
