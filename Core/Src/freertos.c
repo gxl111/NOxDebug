@@ -45,6 +45,7 @@
 /* 1 = 仅跑 defaultTask：片内 CAN + MCP2515 周期发送加热帧 */
 #define CAN_HEATER_TX_TEST_MODE 1
 #define CAN_HEATER_TX_TEST_PERIOD_MS 100u
+#define MCP2515_REINIT_PERIOD_MS 1000u
 
 /* USER CODE END PD */
 
@@ -201,6 +202,7 @@ void StartDefaultTask(void *argument)
   /* USER CODE BEGIN StartDefaultTask */
 #if CAN_HEATER_TX_TEST_MODE
   J1939_Initialization();
+  uint32_t last_mcp_try_tick = 0U;
   (void)MCP2515_Init(MCP2515_BAUD_250K);
   J1939_MESSAGE tx_msg;
   TxMsg_Init(&tx_msg);
@@ -210,7 +212,13 @@ void StartDefaultTask(void *argument)
   {
 #if CAN_HEATER_TX_TEST_MODE
     J1939_CAN_Transmit(&tx_msg);
-    if (MCP2515_IsReady()) {
+    if (!MCP2515_IsReady()) {
+      uint32_t now = HAL_GetTick();
+      if ((now - last_mcp_try_tick) >= MCP2515_REINIT_PERIOD_MS) {
+        last_mcp_try_tick = now;
+        (void)MCP2515_Init(MCP2515_BAUD_250K);
+      }
+    } else {
       MCP2515_CAN_Frame_t mcp_heater;
       mcp_heater.id = J1939_HEATER_CAN_ID;
       mcp_heater.is_ext_id = true;

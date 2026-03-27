@@ -17,6 +17,7 @@ j1939_uint8_t                   J1939_Address;
 
 J1939_MESSAGE                   receivedMsg;
 QueueHandle_t Rx_QueueHandle;
+static uint8_t s_tx_mailbox_timeout_cnt;
 
 void J1939_Initialization(void)
 {
@@ -81,9 +82,17 @@ void J1939_CAN_Transmit(J1939_MESSAGE *MsgPtr)
     /* Avoid dead-lock: if mailbox stays busy (e.g. no ACK/bus errors), skip this cycle. */
     while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan) < 1U) {
         if ((HAL_GetTick() - t0) > 5U) {
+            /* Mailboxes can stay busy on severe bus errors; try to recover CAN periodically. */
+            if (++s_tx_mailbox_timeout_cnt >= 3U) {
+                (void)HAL_CAN_Stop(&hcan);
+                (void)HAL_CAN_Start(&hcan);
+                (void)HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
+                s_tx_mailbox_timeout_cnt = 0U;
+            }
             return;
         }
     }
+    s_tx_mailbox_timeout_cnt = 0U;
     (void)HAL_CAN_AddTxMessage(&hcan, &TxMessage, TxMessageData, &TxMailbox);
 }
 /**
