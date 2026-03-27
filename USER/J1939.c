@@ -77,8 +77,13 @@ void J1939_CAN_Transmit(J1939_MESSAGE *MsgPtr)
 
 
     uint32_t TxMailbox;
-    while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan) < 1)
-        ;
+    uint32_t t0 = HAL_GetTick();
+    /* Avoid dead-lock: if mailbox stays busy (e.g. no ACK/bus errors), skip this cycle. */
+    while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan) < 1U) {
+        if ((HAL_GetTick() - t0) > 5U) {
+            return;
+        }
+    }
     (void)HAL_CAN_AddTxMessage(&hcan, &TxMessage, TxMessageData, &TxMailbox);
 }
 /**
