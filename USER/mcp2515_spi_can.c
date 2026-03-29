@@ -74,6 +74,9 @@
 #define MCP2515_TXB0_READY   0x00
 #define MCP2515_TXREQ        0x08
 #define MCP2515_TXBnCTRL_TXREQ (1u<<3)
+#define MCP2515_TXBnCTRL_TXERR (1u<<4)
+#define MCP2515_TXBnCTRL_MLOA  (1u<<5)
+#define MCP2515_TXBnCTRL_ABTF  (1u<<6)
 #define MCP2515_RXB0CTRL_RXM_STD 0x20
 #define MCP2515_RXB0CTRL_RXM_EXT 0x40
 #define MCP2515_RXB0CTRL_RXM_ANY 0x60
@@ -250,6 +253,9 @@ bool MCP2515_IsReady(void)
 
 int MCP2515_Send(const MCP2515_CAN_Frame_t *frame)
 {
+	uint8_t txb0ctrl;
+	uint8_t canintf;
+
 	if (frame == NULL || frame->len > 8)
 		return -1;
 	if (!frame->is_ext_id) {
@@ -280,11 +286,36 @@ int MCP2515_Send(const MCP2515_CAN_Frame_t *frame)
 	memcpy(&buf[5], frame->data, frame->len);
 	/* 只写 SIDH..DLC + 实际数据字节，避免 len<8 时把栈上垃圾写入 MCP2515 */
 	mcp2515_write_regs(MCP2515_TXB0SIDH, buf, (uint8_t)(5u + frame->len));
+	/* 清发送完成标志，便于本次发送结果判断 */
+	mcp2515_bit_modify(MCP2515_CANINTF, MCP2515_CANINTF_TX0IF, 0);
 
 	/* 请求发送 */
 	CS_LOW();
 	spi_xfer_byte(MCP2515_INS_RTS | (1 << 0));
 	CS_HIGH();
+
+	/* 等待本次发送结束，再判断是否真正发上总线 */
+	for (t = 0; t < 20u; t++) {
+		txb0ctrl = mcp2515_read_reg(MCP2515_TXB0CTRL);
+		if ((txb0ctrl & MCP2515_TXBnCTRL_TXREQ) == 0u)
+			break;
+		HAL_Delay(1);
+	}
+	if (t >= 20u)
+		return -4; /* 发送请求长时间未结束 */
+
+	txb0ctrl = mcp2515_read_reg(MCP2515_TXB0CTRL);
+	canintf = mcp2515_read_reg(MCP2515_CANINTF);
+	if (txb0ctrl & MCP2515_TXBnCTRL_ABTF)
+		return -5; /* 发送中止/失败 */
+	if (txb0ctrl & MCP2515_TXBnCTRL_MLOA)
+		return -6; /* 仲裁丢失 */
+	if (txb0ctrl & MCP2515_TXBnCTRL_TXERR)
+		return -7; /* 发送错误，常见于 ACK/位时序/物理层问题 */
+	if ((canintf & MCP2515_CANINTF_TX0IF) == 0u)
+		return -8; /* 未看到发送完成标志 */
+
+	mcp2515_bit_modify(MCP2515_CANINTF, MCP2515_CANINTF_TX0IF, 0);
 	return 0;
 }
 

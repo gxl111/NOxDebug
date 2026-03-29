@@ -49,7 +49,15 @@ int MCP2515_Init(MCP2515_Baud_t baud);
 
 /**
  * @brief 发送一帧 CAN 报文
- * @return 0 成功；-1 参数非法；-2 TX 超时；-3 ID 超出范围（标准>0x7FF 或扩展>0x1FFFFFFF）
+ * @return 0 成功；
+ *         -1 参数非法；
+ *         -2 发送前等待 TXB0 空闲超时；
+ *         -3 ID 超出范围；
+ *         -4 请求发送后长时间未结束；
+ *         -5 发送失败/中止；
+ *         -6 仲裁丢失；
+ *         -7 发送错误（常见于 ACK/位时序/物理层问题）；
+ *         -8 未看到发送完成标志
  */
 int MCP2515_Send(const MCP2515_CAN_Frame_t *frame);
 
