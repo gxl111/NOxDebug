@@ -101,6 +101,16 @@ int MCP2515_DebugReadCore(uint8_t *canstat, uint8_t *canctrl, uint8_t *cnf1, uin
 			  uint8_t *cnf3, uint8_t *canintf, uint8_t *eflg, uint8_t *tec, uint8_t *rec);
 
 /**
+ * @brief 获取最近一次发送尝试后的诊断寄存器快照
+ * @param txb0ctrl TXB0CTRL(0x30)
+ * @param canintf  CANINTF(0x2C)
+ * @param eflg     EFLG(0x2D)
+ * @param tec      TEC(0x1C)
+ * @param rec      REC(0x1D)
+ */
+void MCP2515_GetLastTxDiag(uint8_t *txb0ctrl, uint8_t *canintf, uint8_t *eflg, uint8_t *tec, uint8_t *rec);
+
+/**
  * @brief 回环自检：切到 Loopback，发一帧并尝试收回，再恢复 Normal
  * @return 0 成功；负值失败（见实现注释）
  */

@@ -71,6 +71,8 @@
 #define MCP2515_REQOP_LOOPBACK 0x40
 #define MCP2515_REQOP_NORMAL 0x00
 #define MCP2515_OPMODE_MASK  0xE0
+#define MCP2515_CANCTRL_ABAT 0x10
+#define MCP2515_CANCTRL_OSM  0x08
 #define MCP2515_TXB0_READY   0x00
 #define MCP2515_TXREQ        0x08
 #define MCP2515_TXBnCTRL_TXREQ (1u<<3)
@@ -102,6 +104,11 @@ static const uint8_t *const cnf_tables[] = {
 
 static SPI_HandleTypeDef *s_spi = &hspi2;
 static volatile bool s_mcp2515_ready = false;
+static uint8_t s_last_txb0ctrl = 0;
+static uint8_t s_last_canintf = 0;
+static uint8_t s_last_eflg = 0;
+static uint8_t s_last_tec = 0;
+static uint8_t s_last_rec = 0;
 
 #define CS_LOW()   HAL_GPIO_WritePin(MCP2515_CS_GPIO_Port, MCP2515_CS_Pin, GPIO_PIN_RESET)
 #define CS_HIGH()  HAL_GPIO_WritePin(MCP2515_CS_GPIO_Port, MCP2515_CS_Pin, GPIO_PIN_SET)
@@ -213,6 +220,27 @@ static void mcp2515_set_normal(void)
 	mcp2515_bit_modify(MCP2515_CANCTRL, MCP2515_OPMODE_MASK, MCP2515_REQOP_NORMAL);
 }
 
+static void mcp2515_set_one_shot(bool enable)
+{
+	mcp2515_bit_modify(MCP2515_CANCTRL, MCP2515_CANCTRL_OSM, enable ? MCP2515_CANCTRL_OSM : 0u);
+}
+
+static void mcp2515_abort_all_tx(void)
+{
+	mcp2515_bit_modify(MCP2515_CANCTRL, MCP2515_CANCTRL_ABAT, MCP2515_CANCTRL_ABAT);
+	HAL_Delay(1);
+	mcp2515_bit_modify(MCP2515_CANCTRL, MCP2515_CANCTRL_ABAT, 0u);
+}
+
+static void mcp2515_capture_tx_diag(void)
+{
+	s_last_txb0ctrl = mcp2515_read_reg(MCP2515_TXB0CTRL);
+	s_last_canintf = mcp2515_read_reg(MCP2515_CANINTF);
+	s_last_eflg = mcp2515_read_reg(MCP2515_EFLG);
+	s_last_tec = mcp2515_read_reg(MCP2515_TEC);
+	s_last_rec = mcp2515_read_reg(MCP2515_REC);
+}
+
 int MCP2515_Init(MCP2515_Baud_t baud)
 {
 	if (baud >= MCP2515_BAUD_COUNT)
@@ -230,6 +258,7 @@ int MCP2515_Init(MCP2515_Baud_t baud)
 	mcp2515_write_reg(MCP2515_CNF1, cnf[0]);
 	mcp2515_write_reg(MCP2515_CNF2, cnf[1]);
 	mcp2515_write_reg(MCP2515_CNF3, cnf[2]);
+	mcp2515_set_one_shot(true);
 
 	/* 接收：RXB0 接受任意，溢出到 RXB1；使能 RX0/RX1 中断 */
 	mcp2515_write_reg(MCP2515_RXB0CTRL, MCP2515_RXB0CTRL_RXM_ANY | MCP2515_RXB0CTRL_BUKT);
@@ -269,8 +298,11 @@ int MCP2515_Send(const MCP2515_CAN_Frame_t *frame)
 	uint32_t t = 0;
 	while (mcp2515_read_reg(MCP2515_TXB0CTRL) & MCP2515_TXBnCTRL_TXREQ) {
 		HAL_Delay(1);
-		if (++t > 50)
+		if (++t > 50) {
+			mcp2515_abort_all_tx();
+			mcp2515_capture_tx_diag();
 			return -2;
+		}
 	}
 
 	uint8_t sidh, sidl, eid8, eid0;
@@ -301,11 +333,15 @@ int MCP2515_Send(const MCP2515_CAN_Frame_t *frame)
 			break;
 		HAL_Delay(1);
 	}
-	if (t >= 20u)
+	if (t >= 20u) {
+		mcp2515_abort_all_tx();
+		mcp2515_capture_tx_diag();
 		return -4; /* 发送请求长时间未结束 */
+	}
 
-	txb0ctrl = mcp2515_read_reg(MCP2515_TXB0CTRL);
-	canintf = mcp2515_read_reg(MCP2515_CANINTF);
+	mcp2515_capture_tx_diag();
+	txb0ctrl = s_last_txb0ctrl;
+	canintf = s_last_canintf;
 	if (txb0ctrl & MCP2515_TXBnCTRL_ABTF)
 		return -5; /* 发送中止/失败 */
 	if (txb0ctrl & MCP2515_TXBnCTRL_MLOA)
@@ -317,6 +353,25 @@ int MCP2515_Send(const MCP2515_CAN_Frame_t *frame)
 
 	mcp2515_bit_modify(MCP2515_CANINTF, MCP2515_CANINTF_TX0IF, 0);
 	return 0;
+}
+
+void MCP2515_GetLastTxDiag(uint8_t *txb0ctrl, uint8_t *canintf, uint8_t *eflg, uint8_t *tec, uint8_t *rec)
+{
+	if (txb0ctrl != NULL) {
+		*txb0ctrl = s_last_txb0ctrl;
+	}
+	if (canintf != NULL) {
+		*canintf = s_last_canintf;
+	}
+	if (eflg != NULL) {
+		*eflg = s_last_eflg;
+	}
+	if (tec != NULL) {
+		*tec = s_last_tec;
+	}
+	if (rec != NULL) {
+		*rec = s_last_rec;
+	}
 }
 
 static void read_rxb_to_frame(uint8_t base_sidh, MCP2515_CAN_Frame_t *frame)
