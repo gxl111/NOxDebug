@@ -203,6 +203,7 @@ void StartDefaultTask(void *argument)
 #if CAN_HEATER_TX_TEST_MODE
   J1939_Initialization();
   uint32_t last_mcp_try_tick = 0U;
+  TickType_t last_wake_tick = xTaskGetTickCount();
   (void)MCP2515_Init(MCP2515_BAUD_250K);
   J1939_MESSAGE tx_msg;
   TxMsg_Init(&tx_msg);
@@ -228,7 +229,7 @@ void StartDefaultTask(void *argument)
       }
       (void)MCP2515_Send(&mcp_heater);
     }
-    vTaskDelay(pdMS_TO_TICKS(CAN_HEATER_TX_TEST_PERIOD_MS));
+    vTaskDelayUntil(&last_wake_tick, pdMS_TO_TICKS(CAN_HEATER_TX_TEST_PERIOD_MS));
 #else
     vTaskDelay(pdMS_TO_TICKS(100));
 #endif
