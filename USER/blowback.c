@@ -1,7 +1,8 @@
 /**
  * @file    blowback.c
  * @brief   Blowback: two valves (sensor1 P24-P28, sensor2 P29-P33).
- *          D01=normal1, D02=blow1, D03=normal2, D04=blow2. Only one sensor may blow at a time (no simultaneous blowback).
+ *          D01=normal1, D02=blow1, D03=normal2, D04=blow2. Only one sensor may blow at a time.
+ *          反吹时关抽气（正常）继电器、开反吹继电器；结束按寄存器恢复两路。
  */
 #include "blowback.h"
 #include "modbus_slave.h"
@@ -26,6 +27,14 @@ typedef struct {
 } BlowCh_t;
 
 static BlowCh_t s_ch[NOX_SENSOR_COUNT];
+
+static void Blowback_NormalizeTiming(BlowCh_t *sc)
+{
+    if (sc->blowtime < BLOW_DURATION_MIN_S)
+        sc->blowtime = BLOW_DURATION_MIN_S;
+    if (sc->blowspan > BLOW_DURATION_MIN_S && sc->blowtime >= sc->blowspan)
+        sc->blowtime = sc->blowspan - 1u;
+}
 
 uint8_t Blowback_IsChannelBlowing(uint8_t ch)
 {
@@ -57,7 +66,10 @@ void BLOW_CONTROL(uint8_t ch, uint8_t state)
     } else {
         sc->blow_flag = 0;
     }
-    /* 阀门保持寄存器驱动 J1-J9；反吹时仅控制反吹阀 J2(ch0)/J5(ch1)/J8(ch2) */
+    /* 反吹 ON：先关抽气 J1/J4/J7，再开反吹 J2/J5/J8（与抽气互斥）。反吹 OFF：两路按寄存器恢复。 */
+    if (state) {
+        Modbus_ForceSensorNormalValveOff(ch);
+    }
     if (ch == 0) {
         HAL_GPIO_WritePin(J2_IN_GPIO_Port, J2_IN_Pin, state ? GPIO_PIN_SET : GPIO_PIN_RESET);   /* S1 反吹 */
     } else if (ch == 1) {
@@ -65,8 +77,10 @@ void BLOW_CONTROL(uint8_t ch, uint8_t state)
     } else {
         HAL_GPIO_WritePin(J8_IN_GPIO_Port, J8_IN_Pin, state ? GPIO_PIN_SET : GPIO_PIN_RESET);   /* S3 反吹 */
     }
-    if (!state)
-        Modbus_ApplySensorValveBlowToGPIO(ch);   /* 反吹结束，将 valve_blow 寄存器写回 GPIO */
+    if (!state) {
+        Modbus_ApplySensorValveBlowToGPIO(ch);
+        Modbus_ApplySensorValveNormalToGPIO(ch);
+    }
 }
 
 uint32_t Blowback_GetInterval(void) { return s_ch[0].blowspan; }
@@ -75,10 +89,7 @@ void Blowback_SetConfig(uint32_t interval_s, uint32_t duration_s)
 {
     s_ch[0].blowspan = interval_s ? interval_s : DEFAULT_BLOW_INTERVAL;
     s_ch[0].blowtime = duration_s ? duration_s : DEFAULT_BLOW_DURATION;
-    if (s_ch[0].blowtime < BLOW_DURATION_MIN_S)
-        s_ch[0].blowtime = BLOW_DURATION_MIN_S;
-    if (s_ch[0].blowspan > 0u && s_ch[0].blowtime >= s_ch[0].blowspan)
-        s_ch[0].blowtime = s_ch[0].blowspan - 1u;
+    Blowback_NormalizeTiming(&s_ch[0]);
 }
 
 uint32_t Blowback_GetIntervalCh1(void) { return s_ch[1].blowspan; }
@@ -87,10 +98,7 @@ void Blowback_SetConfigCh1(uint32_t interval_s, uint32_t duration_s)
 {
     s_ch[1].blowspan = interval_s ? interval_s : DEFAULT_BLOW_INTERVAL;
     s_ch[1].blowtime = duration_s ? duration_s : DEFAULT_BLOW_DURATION;
-    if (s_ch[1].blowtime < BLOW_DURATION_MIN_S)
-        s_ch[1].blowtime = BLOW_DURATION_MIN_S;
-    if (s_ch[1].blowspan > 0u && s_ch[1].blowtime >= s_ch[1].blowspan)
-        s_ch[1].blowtime = s_ch[1].blowspan - 1u;
+    Blowback_NormalizeTiming(&s_ch[1]);
 }
 
 uint32_t Blowback_GetIntervalCh2(void) { return s_ch[2].blowspan; }
@@ -99,10 +107,7 @@ void Blowback_SetConfigCh2(uint32_t interval_s, uint32_t duration_s)
 {
     s_ch[2].blowspan = interval_s ? interval_s : DEFAULT_BLOW_INTERVAL;
     s_ch[2].blowtime = duration_s ? duration_s : DEFAULT_BLOW_DURATION;
-    if (s_ch[2].blowtime < BLOW_DURATION_MIN_S)
-        s_ch[2].blowtime = BLOW_DURATION_MIN_S;
-    if (s_ch[2].blowspan > 0u && s_ch[2].blowtime >= s_ch[2].blowspan)
-        s_ch[2].blowtime = s_ch[2].blowspan - 1u;
+    Blowback_NormalizeTiming(&s_ch[2]);
 }
 
 void Blowback_Init(void)
@@ -176,10 +181,7 @@ static void Blowback_UpdateOne(uint8_t ch)
     }
 
     sc->blowtime = (uint32_t)duration;
-    if (sc->blowtime < BLOW_DURATION_MIN_S)
-        sc->blowtime = BLOW_DURATION_MIN_S;
-    if (sc->blowspan > 0u && sc->blowtime >= sc->blowspan)
-        sc->blowtime = sc->blowspan - 1u;
+    Blowback_NormalizeTiming(sc);
 
     uint32_t tick = time_1s_blow;
     if (sc->blowspan != 0u && tick != 0u && !sc->blow_flag) {

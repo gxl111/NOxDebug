@@ -100,6 +100,21 @@ uint8_t rx_data_h;
 RS485_State_t rs485_state = {0};
 RS485_State_t rs485_state_h={0};
 
+#define MODBUS_TX_WATCHDOG_MS  100U
+
+volatile uint32_t g_modbus_uart1_error_count = 0;
+volatile uint32_t g_modbus_uart1_last_error = 0;
+volatile uint32_t g_modbus_uart1_last_sr = 0;
+volatile uint32_t g_modbus_uart1_rx_byte_count = 0;
+volatile uint32_t g_modbus_uart1_tx_cplt_count = 0;
+volatile uint32_t g_modbus_uart1_tx_watchdog_count = 0;
+volatile uint32_t g_modbus_uart5_error_count = 0;
+volatile uint32_t g_modbus_uart5_last_error = 0;
+volatile uint32_t g_modbus_uart5_last_sr = 0;
+volatile uint32_t g_modbus_uart5_rx_byte_count = 0;
+volatile uint32_t g_modbus_uart5_tx_cplt_count = 0;
+volatile uint32_t g_modbus_uart5_tx_watchdog_count = 0;
+
 /*
  * CRC16_Modbus - Compute Modbus RTU CRC-16.
  * _pBuf : data buffer, _usLen : length.
@@ -152,11 +167,16 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
     if (huart->Instance == MODBUSUART) {
         RS485_Enable_RX(RS485_EN_PORT,RS485_EN_PIN);
         rs485_state.isSending = 0;
+        rs485_state.txStartTick = 0;
+        g_modbus_uart1_tx_cplt_count++;
+        (void)HAL_UART_Receive_IT(&MDSUARTx,&rx_data, 1);
     }
     /* Host UART */
     if (huart->Instance == MODBUSUARTH) {
         RS485_Enable_RX(RS485_EN_PORT_H,RS485_EN_PIN_H);
         rs485_state_h.isSending = 0;
+        rs485_state_h.txStartTick = 0;
+        g_modbus_uart5_tx_cplt_count++;
     }
     
 }
@@ -166,13 +186,87 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     /* Slave */
     if (huart->Instance == MODBUSUART) {
-        MODS_ReciveNew(rx_data);
+        g_modbus_uart1_rx_byte_count++;
+        if (!rs485_state.isSending) {
+            MODS_ReciveNew(rx_data);
+        }
         HAL_UART_Receive_IT(&MDSUARTx,&rx_data, 1);
     }
     /* Host */
     if (huart->Instance == MODBUSUARTH) {
+        g_modbus_uart5_rx_byte_count++;
         MODH_ReciveNew(rx_data_h);
         HAL_UART_Receive_IT(&MDSUARTxH,&rx_data_h, 1);
+    }
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+    uint32_t error_code = huart->ErrorCode;
+    uint32_t sr = huart->Instance->SR;
+
+    if (error_code == HAL_UART_ERROR_NONE) {
+        if ((sr & UART_FLAG_PE) != 0U)  error_code |= HAL_UART_ERROR_PE;
+        if ((sr & UART_FLAG_NE) != 0U)  error_code |= HAL_UART_ERROR_NE;
+        if ((sr & UART_FLAG_FE) != 0U)  error_code |= HAL_UART_ERROR_FE;
+        if ((sr & UART_FLAG_ORE) != 0U) error_code |= HAL_UART_ERROR_ORE;
+    }
+
+    __HAL_UART_CLEAR_PEFLAG(huart);
+    __HAL_UART_CLEAR_FEFLAG(huart);
+    __HAL_UART_CLEAR_NEFLAG(huart);
+    __HAL_UART_CLEAR_OREFLAG(huart);
+
+    if (huart->Instance == MODBUSUART) {
+        uint8_t was_sending = (rs485_state.isSending != 0U);
+        g_modbus_uart1_error_count++;
+        g_modbus_uart1_last_error = error_code;
+        g_modbus_uart1_last_sr = sr;
+        if (!was_sending) {
+            rs485_state.isSending = 0;
+            rs485_state.txStartTick = 0;
+            RS485_Enable_RX(RS485_EN_PORT, RS485_EN_PIN);
+        }
+        (void)HAL_UART_Receive_IT(&MDSUARTx, &rx_data, 1);
+        huart->ErrorCode = HAL_UART_ERROR_NONE;
+    }
+
+    if (huart->Instance == MODBUSUARTH) {
+        uint8_t was_sending = (rs485_state_h.isSending != 0U);
+        g_modbus_uart5_error_count++;
+        g_modbus_uart5_last_error = error_code;
+        g_modbus_uart5_last_sr = sr;
+        if (!was_sending) {
+            rs485_state_h.isSending = 0;
+            rs485_state_h.txStartTick = 0;
+            RS485_Enable_RX(RS485_EN_PORT_H, RS485_EN_PIN_H);
+        }
+        (void)HAL_UART_Receive_IT(&MDSUARTxH, &rx_data_h, 1);
+        huart->ErrorCode = HAL_UART_ERROR_NONE;
+    }
+}
+
+void Modbus_ServiceTxWatchdog(void)
+{
+    uint32_t now = HAL_GetTick();
+
+    if (rs485_state.isSending &&
+        ((uint32_t)(now - rs485_state.txStartTick) > MODBUS_TX_WATCHDOG_MS)) {
+        (void)HAL_UART_AbortTransmit(&MDSUARTx);
+        rs485_state.isSending = 0;
+        rs485_state.txStartTick = 0;
+        g_modbus_uart1_tx_watchdog_count++;
+        RS485_Enable_RX(RS485_EN_PORT, RS485_EN_PIN);
+        (void)HAL_UART_Receive_IT(&MDSUARTx, &rx_data, 1);
+    }
+
+    if (rs485_state_h.isSending &&
+        ((uint32_t)(now - rs485_state_h.txStartTick) > MODBUS_TX_WATCHDOG_MS)) {
+        (void)HAL_UART_AbortTransmit(&MDSUARTxH);
+        rs485_state_h.isSending = 0;
+        rs485_state_h.txStartTick = 0;
+        g_modbus_uart5_tx_watchdog_count++;
+        RS485_Enable_RX(RS485_EN_PORT_H, RS485_EN_PIN_H);
+        (void)HAL_UART_Receive_IT(&MDSUARTxH, &rx_data_h, 1);
     }
 }
 

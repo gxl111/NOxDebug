@@ -52,6 +52,10 @@ nox_rct6\freertos.o: ../USER/app_config.h
 nox_rct6\freertos.o: ../Core/Inc/can.h
 nox_rct6\freertos.o: ../Core/Inc/usart.h
 nox_rct6\freertos.o: ../Core/Inc/gpio.h
+nox_rct6\freertos.o: ../USER/mcp2515_spi_can.h
+nox_rct6\freertos.o: F:/Keil_v5/ARM/ARMCC/include/stdbool.h
+nox_rct6\freertos.o: ../HARDWARE/oled.h
+nox_rct6\freertos.o: ../HARDWARE/font.h
 nox_rct6\freertos.o: ../HARDWARE/sdcard.h
 nox_rct6\freertos.o: ../Core/Inc/spi.h
 nox_rct6\freertos.o: ../Middlewares/Third_Party/FatFs/src/ff.h

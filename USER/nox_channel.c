@@ -4,11 +4,22 @@
  *          Params per channel for future 3-way; currently 2 channels (SA 0x52, 0x51).
  *          Runtime strategy: blowback overrides; fusion only when both valid and not blowing;
  *          otherwise degrades to primary-backup; both invalid => fault readback (high 0xFF).
+ *          某路反吹时：该路 raw/ppm/state/valid 冻结为反吹前最后值，直至反吹结束（仍刷新 last_rx_ms，且不做静默超时改写）。
  */
 #include "nox_channel.h"
 #include "app_config.h"
 #include "blowback.h"
+#include "main.h"
 #include <string.h>
+
+/** Bit 9: no J1939 NOx message within NOX_CAN_SILENCE_TIMEOUT_MS (disconnect / bus fault). */
+#define NOX_STATE_BIT_LINK_LOST  (1u << 9)
+
+/** 尚未收到 CAN 或静默超时：与 UpdateCommTimeouts 超时分支一致（bit8+bit9，valid=0） */
+static uint16_t NoxChannel_StateWordLinkLost(void)
+{
+    return (uint16_t)((1u << 8) | NOX_STATE_BIT_LINK_LOST);
+}
 
 /*
  * Active channel after GetCurrentOutput: 0=S1, 1=S2, 2=fusion average applied.
@@ -82,14 +93,19 @@ static void copy_fusion_out(float *nox_ppm, float *o2_pct, uint16_t *state)
     s_readback_high_byte = 3u;  /* 3 = 融合（与 ch2 的 2 区分） */
     if (nox_ppm) *nox_ppm = n;
     if (o2_pct) *o2_pct = o;
-    if (state) *state = (n_valid > 0u) ? g_noxChannels[0].state : 0u;
+    if (state) *state = (n_valid > 0u) ? 0x1FFu : 0u;
 }
 
 /* Both channels invalid: fill from fallback_ch for continuity; readback marks fault */
 static void copy_fault_fallback(float *nox_ppm, float *o2_pct, uint16_t *state, uint8_t fallback_ch)
 {
+    if (fallback_ch >= NOX_SENSOR_COUNT) fallback_ch = 0u;
+    s_active_output_channel = fallback_ch;
     s_readback_high_byte = NOX_READBACK_FAULT;
-    copy_channel_out(fallback_ch, nox_ppm, o2_pct, state);
+    NoxChannel_t *c = &g_noxChannels[fallback_ch];
+    if (nox_ppm) *nox_ppm = c->nox_ppm;
+    if (o2_pct) *o2_pct = c->o2_pct;
+    if (state) *state = c->state;
 }
 
 /*
@@ -150,6 +166,9 @@ void NoxChannel_Init(void)
         c->o2_y[0]  = O2_Y0;  c->o2_y[1]  = O2_Y1;  c->o2_y[2]  = O2_Y2;
         NoxSensor_CalibrationInit(c->nox_x, c->nox_y, &c->nox_low, &c->nox_high);
         NoxSensor_CalibrationInit(c->o2_x,  c->o2_y,  &c->o2_low,  &c->o2_high);
+        c->valid = 0u;
+        c->state = NoxChannel_StateWordLinkLost();
+        /* last_rx_ms 保持 0：表示尚未收到过本通道 CAN，bit9 链路丢失直至首帧 */
     }
 }
 
@@ -204,6 +223,11 @@ void NoxChannel_UpdateFromCan(uint8_t ch_index, const uint8_t *data)
     if (ch_index >= NOX_SENSOR_COUNT || !data) return;
 
     NoxChannel_t *c = &g_noxChannels[ch_index];
+    /* 反吹中仍刷新接收时刻，避免静默超时把该路打成链路丢失，覆盖冻结的测量 */
+    c->last_rx_ms = HAL_GetTick();
+    if (Blowback_IsChannelBlowing(ch_index))
+        return;
+
     c->raw_nox = (uint16_t)((data[1] << 8) | data[0]);
     c->raw_o2  = (uint16_t)((data[3] << 8) | data[2]);
 
@@ -219,6 +243,26 @@ void NoxChannel_UpdateFromCan(uint8_t ch_index, const uint8_t *data)
     c->state = build_state(statusByte, heaterByte, errNOx, errO2);
     /* Valid when all FMIs 0x1F and NOx/O2 stable and at temp (same as state 0x1FF). */
     c->valid = (c->state == 0x1FFu) ? 1u : 0u;
+}
+
+void NoxChannel_UpdateCommTimeouts(uint32_t now_ms)
+{
+    for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
+        NoxChannel_t *c = &g_noxChannels[ch];
+        if (Blowback_IsChannelBlowing(ch))
+            continue;
+        uint32_t last = c->last_rx_ms;
+        if (last == 0u) {
+            /* 上电后尚未收到任何本通道帧：立即保持链路丢失（bit9=1），不等待静默超时 */
+            c->valid = 0u;
+            c->state = NoxChannel_StateWordLinkLost();
+            continue;
+        }
+        if ((now_ms - last) >= (uint32_t)NOX_CAN_SILENCE_TIMEOUT_MS) {
+            c->valid = 0u;
+            c->state = NoxChannel_StateWordLinkLost();
+        }
+    }
 }
 
 uint8_t NoxChannel_IsValid(uint8_t ch_index)

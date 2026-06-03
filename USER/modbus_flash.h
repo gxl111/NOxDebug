@@ -1,7 +1,7 @@
 /*
  * modbus_flash.h - Internal Flash save/load for Modbus register parameters (VAR_T).
  * Saves 36 floats (S1/S2/S3 calibration) + blow interval/duration for each channel to FLASH_USER area.
- * Loader still accepts legacy image: 24 floats + magic BLWF + S1/S2 blow only.
+ * Supports loading older image: 24 floats + magic BLWF + S1/S2 blow only.
  * Stagger between channels is fixed in blowback.c (BLOW_STAGGER_SEC), not in Flash.
  */
 #ifndef __MODBUS_FLASH_H

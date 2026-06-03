@@ -7,7 +7,6 @@
 #include <string.h>
 #include "usart.h"
 #include "tim.h"
-// #include "oled.h"  /* OLED 已禁用 */
 #include "modbus_host.h"
 #include "modbus_slave.h"
 
@@ -52,8 +51,13 @@ void RS485_Send_Data_IT_H(uint8_t *pData, uint16_t Size) {
         return;
     }
     rs485_state_h.isSending = 1;
+    rs485_state_h.txStartTick = HAL_GetTick();
     RS485_Enable_TX(RS485_EN_PORT_H, RS485_EN_PIN_H);
-    HAL_UART_Transmit_IT(&MDSUARTxH, pData, Size);
+    if (HAL_UART_Transmit_IT(&MDSUARTxH, pData, Size) != HAL_OK) {
+        rs485_state_h.isSending = 0;
+        rs485_state_h.txStartTick = 0;
+        RS485_Enable_RX(RS485_EN_PORT_H, RS485_EN_PIN_H);
+    }
 }
 /*
  * MODH_SendWithCRC: Append 2-byte CRC to TxBuf and send via RS485.
@@ -406,6 +410,7 @@ uint8_t MODH_ReadParam_03H(uint16_t _reg, uint16_t _num)
 			{
 				break;
 			}
+			vTaskDelay(pdMS_TO_TICKS(1));
 		}
 		
 		if (g_tModH.fAck03H > 0)
@@ -452,6 +457,7 @@ uint8_t MODH_WriteParam_06H(uint16_t _reg, uint16_t _value)
 			{
 				break;
 			}
+			vTaskDelay(pdMS_TO_TICKS(1));
 		}
 		
 		if (g_tModH.fAck06H > 0)
@@ -497,6 +503,7 @@ uint8_t MODH_WriteParam_10H(uint16_t _reg, uint8_t _num, uint8_t *_buf)
 			{
 				break;
 			}
+			vTaskDelay(pdMS_TO_TICKS(1));
 		}
 		
 		if (g_tModH.fAck10H > 0)

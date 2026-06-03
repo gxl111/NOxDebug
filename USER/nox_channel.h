@@ -18,7 +18,8 @@ typedef struct {
     uint16_t raw_o2;
     float    nox_ppm;
     float    o2_pct;
-    uint16_t state;             /* 9-bit status same as P07 */
+    uint16_t state;             /* status: J1939-derived bits 0..8 + bit9 link-lost (see README) */
+    uint32_t last_rx_ms;        /* HAL_GetTick() at last NoxChannel_UpdateFromCan; 0 = never */
     /* Calibration: segment params */
     NoxSensorParam_t nox_low, nox_high;
     NoxSensorParam_t o2_low,  o2_high;
@@ -47,6 +48,9 @@ void NoxChannel_Init(void);
  *   data[5]    Heater Byte, data[6] Error NOx, data[7] Error O2 (FMI in low 5 bits).
  */
 void NoxChannel_UpdateFromCan(uint8_t ch_index, const uint8_t *data);
+
+/** Call each control cycle (e.g. NOx_Receive) with HAL_GetTick(): marks timeout channels link-lost. */
+void NoxChannel_UpdateCommTimeouts(uint32_t now_ms);
 
 /** Return 1 if channel has valid measurement (for primary/backup or fusion). */
 uint8_t NoxChannel_IsValid(uint8_t ch_index);

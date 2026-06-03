@@ -6,11 +6,11 @@
 #include "modbus_slave.h"
 #include "nox_channel.h"
 #include "app_config.h"
+#include "blowback.h"
 #include "main.h"
 #include <string.h>
 #include "usart.h"
 #include "tim.h"
-// #include "oled.h"  /* OLED 已禁用 */
 #include "semphr.h"
 /*
 *********************************************************************************************************
@@ -66,6 +66,7 @@ static float RegistersToFloat_BE(uint16_t reg1, uint16_t reg2);
 
 
 MODS_T g_tModS = {0};
+static uint8_t s_mods_tx_frame[S_TX_BUF_SIZE];
 VAR_T g_tVar = { .S1 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu },
                  .S2 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu },
                  .S3 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu } };
@@ -80,8 +81,18 @@ VAR_T g_tVar = { .S1 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu },
 // RX semaphore (signalled on 3.5 char timeout)
 QueueHandle_t MODRx_SemaphoreHandle;
 
+volatile uint32_t g_mods_rx_timeout_count = 0;
+volatile uint32_t g_mods_frame_ok_count = 0;
+volatile uint32_t g_mods_short_frame_count = 0;
+volatile uint32_t g_mods_crc_error_count = 0;
+volatile uint32_t g_mods_addr_miss_count = 0;
+volatile uint32_t g_mods_tx_start_count = 0;
+volatile uint32_t g_mods_tx_busy_count = 0;
+volatile uint32_t g_mods_tx_fail_count = 0;
+volatile uint8_t g_mods_last_frame_len = 0;
 
-/* 线圈 D01-D04 已废弃，阀门改由保持寄存器 40053-40055/40095-40097/40137-40139 控制 J1-J9 */
+
+/* 线圈 D01-D04 不驱动 GPIO；阀门由保持寄存器 40053-40055/40095-40097/40137-40139 控制 J1-J9 */
 
 
 /*
@@ -103,13 +114,15 @@ void MODS_Poll(void)
 {
     uint16_t addr;
     uint16_t crc1;
-    uint8_t pending_len = 0;
-    uint8_t pending_save[S_RX_BUF_SIZE];
 
-    /* After 3.5 char timeout callback gives semaphore; we take it here. */
-    
-    if(pdTRUE==xSemaphoreTake(MODRx_SemaphoreHandle,portMAX_DELAY)){
+    /* Wake periodically so a lost UART TxCplt interrupt cannot leave RX muted forever. */
+    Modbus_ServiceTxWatchdog();
 
+    if (pdTRUE != xSemaphoreTake(MODRx_SemaphoreHandle, pdMS_TO_TICKS(10))) {
+        return;
+    }
+
+#if 0
         NVIC_DisableIRQ(USART1_IRQn);
         pending_len = g_tModS.RxCount;
         if (pending_len > S_RX_BUF_SIZE)
@@ -119,9 +132,11 @@ void MODS_Poll(void)
 
         /* 已完成帧只在 RxFrameSnap；RxBuf 留给 ISR 继续收下一帧（pending 已拷到栈上） */
         NVIC_EnableIRQ(USART1_IRQn);
+#endif
 
         if (g_tModS.RxFrameLen < 4)				/* need at least 4 bytes: addr+func+reg */
         {
+            g_mods_short_frame_count++;
             goto err_ret;
         }
 
@@ -129,6 +144,7 @@ void MODS_Poll(void)
         crc1 = CRC16_Modbus(g_tModS.RxFrameSnap, g_tModS.RxFrameLen);
         if (crc1 != 0)
         {
+            g_mods_crc_error_count++;
             goto err_ret;
         }
 
@@ -136,18 +152,19 @@ void MODS_Poll(void)
         addr = g_tModS.RxFrameSnap[0];				/* byte 1: address */
         if (addr != SADDR485)		 			/* not for us */
         {
+            g_mods_addr_miss_count++;
             goto err_ret;
         }
 
         /* Parse function code and build response (same lock order as NOxDefault task) */
 				MODS_AnalyzeApp();
-    
-    }
+        g_mods_frame_ok_count++;
     
 
 err_ret:
     NVIC_DisableIRQ(USART1_IRQn);
     g_tModS.RxFrameLen = 0;
+#if 0
     if (pending_len > 0U) {
         if (pending_len > S_RX_BUF_SIZE)
             pending_len = S_RX_BUF_SIZE;
@@ -157,6 +174,7 @@ err_ret:
     } else {
         g_tModS.RxCount = 0;
     }
+#endif
     NVIC_EnableIRQ(USART1_IRQn);
 }
 
@@ -185,7 +203,7 @@ void StartHardTimer(uint32_t _uiTimeOut, void * _pCallBack) {
 
 
 /*
- * HAL_TIM_OC_DelayElapsedCallback (legacy): TIM2 CC1 used for 3.5 char timeout; optional.
+ * HAL_TIM_OC_DelayElapsedCallback: TIM2 CC1 used for 3.5 char timeout; optional.
  */
 
 //void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
@@ -242,6 +260,7 @@ void MODS_ReciveNew(uint8_t _byte)
 */
 static void MODS_RxTimeOut(void)
 {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     uint8_t n;
 
     NVIC_DisableIRQ(USART1_IRQn);
@@ -251,20 +270,32 @@ static void MODS_RxTimeOut(void)
     if (n > 0U)
         (void)memcpy(g_tModS.RxFrameSnap, g_tModS.RxBuf, (size_t)n);
     g_tModS.RxFrameLen = n;
+    g_mods_last_frame_len = n;
+    g_mods_rx_timeout_count++;
     g_tModS.RxCount = 0;
     NVIC_EnableIRQ(USART1_IRQn);
 
-    (void)xSemaphoreGiveFromISR(MODRx_SemaphoreHandle, NULL);
+    (void)xSemaphoreGiveFromISR(MODRx_SemaphoreHandle, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 
 void RS485_Send_Data_IT(uint8_t *pData, uint16_t Size) {
     if (rs485_state.isSending) {
+        g_mods_tx_busy_count++;
         return;
     }
     rs485_state.isSending = 1;
+    rs485_state.txStartTick = HAL_GetTick();
     RS485_Enable_TX(RS485_EN_PORT,RS485_EN_PIN);
-    HAL_UART_Transmit_IT(&MDSUARTx, pData, Size);
+    if (HAL_UART_Transmit_IT(&MDSUARTx, pData, Size) != HAL_OK) {
+        g_mods_tx_fail_count++;
+        rs485_state.isSending = 0;
+        rs485_state.txStartTick = 0;
+        RS485_Enable_RX(RS485_EN_PORT,RS485_EN_PIN);
+    } else {
+        g_mods_tx_start_count++;
+    }
 }
 /*
 *********************************************************************************************************
@@ -276,14 +307,23 @@ void RS485_Send_Data_IT(uint8_t *pData, uint16_t Size) {
 static void MODS_SendWithCRC(uint8_t *_pBuf, uint8_t _ucLen)
 {
     uint16_t crc;
-    uint8_t buf[S_TX_BUF_SIZE];
 
-    memcpy(buf, _pBuf, _ucLen);
+    if (((uint16_t)_ucLen + 2u) > S_TX_BUF_SIZE)
+        return;
+
+    if (rs485_state.isSending) {
+        g_mods_tx_busy_count++;
+        return;
+    }
+
+    (void)memcpy(s_mods_tx_frame, _pBuf, _ucLen);
+
     crc = CRC16_Modbus(_pBuf, _ucLen);
-    buf[_ucLen++] = crc >> 8;
-    buf[_ucLen++] = crc;
+    s_mods_tx_frame[_ucLen++] = crc >> 8;
+    s_mods_tx_frame[_ucLen++] = crc;
+    g_tModS.TxCount = _ucLen;
 
-    RS485_Send_Data_IT(buf, _ucLen);
+    RS485_Send_Data_IT(s_mods_tx_frame, g_tModS.TxCount);
 }
 
 /*
@@ -489,6 +529,7 @@ static void MODS_03H(void)
     }
     
     
+    LOCK_VAR();
     for (i = 0; i < num; )
     {
          uint8_t read_state = MODS_ReadRegValue(reg, &reg_value[2 * i]);
@@ -506,6 +547,7 @@ static void MODS_03H(void)
             reg++;
          }
     }
+    UNLOCK_VAR();
     
     /* Step 3: send response or exception */
 err_ret:
@@ -1179,6 +1221,9 @@ void Var_Write_SensorValve(uint8_t ch, uint8_t v, uint16_t value) {
     else if (v == 1u) S(ch)->valve_blow = (uint16_t)on;
     else S(ch)->valve_cal = (uint16_t)on;
     UNLOCK_VAR();
+    /* 反吹中抽气 GPIO 由 BLOW_CONTROL 保持关，只记寄存器，结束后再 Apply */
+    if (v == 0u && Blowback_IsChannelBlowing(ch))
+        return;
     Valve_WriteGPIO(ch, v, on);
 }
 
@@ -1189,6 +1234,71 @@ void Modbus_ApplySensorValveBlowToGPIO(uint8_t ch) {
     v = (ch == 0u) ? g_tVar.S1.valve_blow : ((ch == 1u) ? g_tVar.S2.valve_blow : g_tVar.S3.valve_blow);
     UNLOCK_VAR();
     Valve_WriteGPIO(ch, 1, (v != 0u) ? 1u : 0u);
+}
+
+void Modbus_ApplySensorValveNormalToGPIO(uint8_t ch) {
+    if (ch > 2u) return;
+    uint16_t v;
+    LOCK_VAR();
+    v = (ch == 0u) ? g_tVar.S1.valve_normal : ((ch == 1u) ? g_tVar.S2.valve_normal : g_tVar.S3.valve_normal);
+    UNLOCK_VAR();
+    Valve_WriteGPIO(ch, 0, (v != 0u) ? 1u : 0u);
+}
+
+void Modbus_ForceSensorNormalValveOff(uint8_t ch) {
+    if (ch > 2u) return;
+    Valve_WriteGPIO(ch, 0u, 0u);
+}
+
+/* 与 nox_channel.c 中 NOX_STATE_BIT_LINK_LOST 一致 */
+#define SENSOR_STATUS_LINK_LOST_MASK  (0x0200u)
+
+void Modbus_AutoSuctionValvesUpdate(void)
+{
+    static uint8_t s_applied[NOX_SENSOR_COUNT_MAX] = {0u};
+    static uint8_t s_pending[NOX_SENSOR_COUNT_MAX] = {0u};
+    static uint32_t s_pending_since[NOX_SENSOR_COUNT_MAX] = {0u};
+
+    for (uint8_t ch = 0u; ch < NOX_SENSOR_COUNT; ch++) {
+        uint32_t now = HAL_GetTick();
+        uint16_t st = Var_Read_SensorStatus(ch);
+        uint8_t link_ok = ((st & SENSOR_STATUS_LINK_LOST_MASK) == 0u);
+        uint8_t current = (Var_Read_SensorValve(ch, 0u) != 0u) ? 1u : 0u;
+        uint8_t not_cal = (Var_Read_SensorValve(ch, 2u) == 0u);
+        uint8_t not_blow = (uint8_t)(!Blowback_IsChannelBlowing(ch));
+        uint8_t desired = (link_ok && not_cal && not_blow) ? 1u : 0u;
+        uint8_t force_off = (uint8_t)(!not_cal || !not_blow);
+
+        s_applied[ch] = current;
+        if (force_off) {
+            if (current != 0u)
+                Var_Write_SensorValve(ch, 0u, 0u);
+            s_applied[ch] = 0u;
+            s_pending[ch] = 0u;
+            s_pending_since[ch] = now;
+            continue;
+        }
+
+        if (desired == s_applied[ch]) {
+            if (desired != 0u)
+                Modbus_ApplySensorValveNormalToGPIO(ch);
+            s_pending[ch] = desired;
+            s_pending_since[ch] = now;
+            continue;
+        }
+
+        if (desired != s_pending[ch]) {
+            s_pending[ch] = desired;
+            s_pending_since[ch] = now;
+            continue;
+        }
+
+        if ((now - s_pending_since[ch]) >= SUCTION_VALVE_DEBOUNCE_MS) {
+            Var_Write_SensorValve(ch, 0u, desired);
+            s_applied[ch] = desired;
+            s_pending_since[ch] = now;
+        }
+    }
 }
 
 #undef S

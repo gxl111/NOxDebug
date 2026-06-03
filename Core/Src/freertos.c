@@ -30,9 +30,10 @@
 #include <stdio.h>
 #include "NOx.h"
 #include "mcp2515_spi_can.h"
-// #include "oled.h"  /* OLED 已禁用 */
+#include "oled.h"  
 #include "sdcard.h"
 #include "modbus_slave.h"
+#include "app_config.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,7 +44,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 /* 1 = 仅跑 defaultTask：片内 CAN + MCP2515 周期发送加热帧 */
-#define CAN_HEATER_TX_TEST_MODE 1
+#define CAN_HEATER_TX_TEST_MODE 0
 #define CAN_HEATER_TX_TEST_PERIOD_MS 100u
 #define MCP2515_REINIT_PERIOD_MS 1000u
 
@@ -71,22 +72,22 @@ const osThreadAttr_t defaultTask_attributes = {
 osThreadId_t NOx_DefaultHandle;
 const osThreadAttr_t NOx_Default_attributes = {
   .name = "NOx_Default",
-  .stack_size = 1536 * 4,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ModBus_Slave */
 osThreadId_t ModBus_SlaveHandle;
 const osThreadAttr_t ModBus_Slave_attributes = {
   .name = "ModBus_Slave",
-  .stack_size = 1536 * 4,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for NOx_Receive */
 osThreadId_t NOx_ReceiveHandle;
 const osThreadAttr_t NOx_Receive_attributes = {
   .name = "NOx_Receive",
-  .stack_size = 2048 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = 1536 * 4,
+  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for ModBus_Host */
 osThreadId_t ModBus_HostHandle;
@@ -124,9 +125,13 @@ void MX_FREERTOS_Init(void) {
    * 任一环节卡死都会表现为「永远进不了 StartDefaultTask」（其实尚未 osThreadNew）。
    */
 #else
-  // OLED_Init();
-  // OLED_PrintASCIIString(0, 30, "waiting sd ", &afont16x8, OLED_COLOR_REVERSED);
-  // OLED_ShowFrame();
+    
+#if APP_USE_OLED
+  OLED_Init();
+  OLED_PrintASCIIString(0, 30, "waiting sd ", &afont16x8, OLED_COLOR_REVERSED);
+  OLED_ShowFrame();
+#else
+#endif
   //WritetoSD(SD_FileName,WriteBuffer, sizeof(WriteBuffer));  
   handleConfig();
     
@@ -169,15 +174,19 @@ void MX_FREERTOS_Init(void) {
 #if !CAN_HEATER_TX_TEST_MODE
   /* creation of NOx_Default */
   NOx_DefaultHandle = osThreadNew(NOxDefault, NULL, &NOx_Default_attributes);
+  configASSERT(NOx_DefaultHandle != NULL);
 
   /* creation of ModBus_Slave */
   ModBus_SlaveHandle = osThreadNew(ModBusSlave, NULL, &ModBus_Slave_attributes);
+  configASSERT(ModBus_SlaveHandle != NULL);
 
   /* creation of NOx_Receive */
   NOx_ReceiveHandle = osThreadNew(NOxReceive, NULL, &NOx_Receive_attributes);
+  configASSERT(NOx_ReceiveHandle != NULL);
 
   /* creation of ModBus_Host */
   ModBus_HostHandle = osThreadNew(ModBusHost, NULL, &ModBus_Host_attributes);
+  configASSERT(ModBus_HostHandle != NULL);
 #endif
 
   /* USER CODE BEGIN RTOS_THREADS */

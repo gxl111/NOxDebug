@@ -55,6 +55,7 @@ nox_rct6\main.o: ../Core/Inc/spi.h
 nox_rct6\main.o: ../Core/Inc/tim.h
 nox_rct6\main.o: ../Core/Inc/usart.h
 nox_rct6\main.o: ../Core/Inc/gpio.h
+nox_rct6\main.o: ../USER/app_config.h
 nox_rct6\main.o: ../USER/modbus.h
 nox_rct6\main.o: ../USER/modbus_slave.h
 nox_rct6\main.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/semphr.h

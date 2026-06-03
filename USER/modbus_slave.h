@@ -200,6 +200,15 @@ extern void (*s_TIM_CallBack1)(void);
 extern MODS_T g_tModS;
 extern VAR_T g_tVar;
 extern SemaphoreHandle_t MODRx_SemaphoreHandle;
+extern volatile uint32_t g_mods_rx_timeout_count;
+extern volatile uint32_t g_mods_frame_ok_count;
+extern volatile uint32_t g_mods_short_frame_count;
+extern volatile uint32_t g_mods_crc_error_count;
+extern volatile uint32_t g_mods_addr_miss_count;
+extern volatile uint32_t g_mods_tx_start_count;
+extern volatile uint32_t g_mods_tx_busy_count;
+extern volatile uint32_t g_mods_tx_fail_count;
+extern volatile uint8_t g_mods_last_frame_len;
 extern void Start_Receive(void);
 
 /* Coils */
@@ -291,11 +300,20 @@ extern void Var_Write_SensorBlowInterval(uint8_t ch, uint16_t v);
 extern void Var_Write_SensorBlowDuration(uint8_t ch, uint16_t v);
 extern void Var_Write_SensorBlowCmd(uint8_t ch, uint16_t v);
 
-/* 阀门保持寄存器：v=0 正常抽气 1 反吹 2 校准；写时驱动 J1-J9，反吹任务会覆盖 valve_blow */
+/* 阀门保持寄存器：v=0 正常抽气 1 反吹 2 校准；写时驱动 J1-J9，反吹任务会覆盖 valve_blow/强关抽气 */
 extern uint16_t Var_Read_SensorValve(uint8_t ch, uint8_t v);
 extern void Var_Write_SensorValve(uint8_t ch, uint8_t v, uint16_t value);
 /** 反吹结束后由 blowback 调用，将 valve_blow 寄存器写回对应 GPIO */
 extern void Modbus_ApplySensorValveBlowToGPIO(uint8_t ch);
+/** 反吹结束后将 valve_normal（抽气）寄存器写回 GPIO */
+extern void Modbus_ApplySensorValveNormalToGPIO(uint8_t ch);
+/** 反吹开始时仅拉低抽气 GPIO，不改变 g_tVar.valve_normal */
+extern void Modbus_ForceSensorNormalValveOff(uint8_t ch);
+/**
+ * 每路传感器：状态字 bit9(0x0200) 未置位（通信未判链路丢失）、且非反吹、且校准阀关 → 抽气(正常)继电器置 1；否则置 0。
+ * 会更新 valve_normal 寄存器并驱动 GPIO（与反吹中抽气写保护一致）。
+ */
+extern void Modbus_AutoSuctionValvesUpdate(void);
 
 /* Blowback/alarm config readback */
 extern void Var_Read_BlowbackCfg(uint16_t *p24, uint16_t *p25);

@@ -29,6 +29,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "app_config.h"
 #include "modbus.h"
 #include "modbus_slave.h"
 #include "modbus_host.h"
@@ -70,6 +71,59 @@ void MX_FREERTOS_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+#if RELAY_TEST_MODE
+typedef struct {
+  GPIO_TypeDef *port;
+  uint16_t pin;
+} RelayTestPin_t;
+
+static const RelayTestPin_t s_relay_test_pins[] = {
+  {J1_IN_GPIO_Port, J1_IN_Pin},
+  {J2_IN_GPIO_Port, J2_IN_Pin},
+  {J3_IN_GPIO_Port, J3_IN_Pin},
+  {J4_IN_GPIO_Port, J4_IN_Pin},
+  {J5_IN_GPIO_Port, J5_IN_Pin},
+  {J6_IN_GPIO_Port, J6_IN_Pin},
+  {J7_IN_GPIO_Port, J7_IN_Pin},
+  {J8_IN_GPIO_Port, J8_IN_Pin},
+  {J9_IN_GPIO_Port, J9_IN_Pin},
+  {SENSOR_POWER0_GPIO_Port, SENSOR_POWER0_Pin}, /* JC1 */
+  {SENSOR_POWER1_GPIO_Port, SENSOR_POWER1_Pin}, /* JC2 */
+  {SENSOR_POWER2_GPIO_Port, SENSOR_POWER2_Pin}, /* JC3 */
+};
+
+static void RelayTest_SetAll(GPIO_PinState state)
+{
+  uint8_t i;
+
+  for (i = 0u; i < (uint8_t)(sizeof(s_relay_test_pins) / sizeof(s_relay_test_pins[0])); i++) {
+    HAL_GPIO_WritePin(s_relay_test_pins[i].port, s_relay_test_pins[i].pin, state);
+  }
+}
+
+static void RelayTest_Run(void)
+{
+  uint8_t i;
+
+  RelayTest_SetAll(GPIO_PIN_RESET);
+  HAL_Delay(RELAY_TEST_STEP_MS);
+
+  for (;;) {
+    for (i = 0u; i < (uint8_t)(sizeof(s_relay_test_pins) / sizeof(s_relay_test_pins[0])); i++) {
+      RelayTest_SetAll(GPIO_PIN_RESET);
+      HAL_Delay(RELAY_TEST_GAP_MS);
+      HAL_GPIO_WritePin(s_relay_test_pins[i].port, s_relay_test_pins[i].pin, GPIO_PIN_SET);
+      HAL_Delay(RELAY_TEST_STEP_MS);
+      HAL_GPIO_WritePin(s_relay_test_pins[i].port, s_relay_test_pins[i].pin, GPIO_PIN_RESET);
+    }
+
+    RelayTest_SetAll(GPIO_PIN_SET);
+    HAL_Delay(RELAY_TEST_STEP_MS);
+    RelayTest_SetAll(GPIO_PIN_RESET);
+    HAL_Delay(RELAY_TEST_STEP_MS);
+  }
+}
+#endif
 
 /* USER CODE END 0 */
 
@@ -102,6 +156,9 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+#if RELAY_TEST_MODE
+  RelayTest_Run();
+#endif
   MX_USART1_UART_Init();
   MX_CAN_Init();
   MX_I2C1_Init();

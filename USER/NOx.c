@@ -1,7 +1,7 @@
 /**
  * @file    NOx.c
  * @brief   NOx tasks: J1939 receive/handle (per channel), strategy (single/primary_backup/fusion),
- *          default task (calibration, alarm, blowback; OLED 已禁用), Modbus slave init.
+ *          default task (calibration, alarm, blowback; OLED 由 APP_USE_OLED 控制), Modbus slave init.
  */
 #include "NOx.h"
 #include "FreeRTOS.h"
@@ -12,9 +12,11 @@
 #include "blowback.h"
 #include "calibration.h"
 #include "alarm.h"
-// #include "oled.h"  /* OLED 已禁用 */
-#include "sdcard.h"
 #include "app_config.h"
+#if APP_USE_OLED
+#include "oled.h"
+#endif
+#include "sdcard.h"
 #include "nox_channel.h"
 #include "J1939.H"
 #include "mcp2515_spi_can.h"
@@ -79,34 +81,87 @@ static void NOx_UpdatePerChannelRegs(void)
     UNLOCK_VAR();
 }
 
+#if APP_USE_OLED
+static void NOx_OledRefresh(void)
+{
+    char buf[32];
+    float n1 = Var_Read_SensorLiveNox(0), o1 = Var_Read_SensorLiveO2(0);
+    float n2 = Var_Read_SensorLiveNox(1), o2 = Var_Read_SensorLiveO2(1);
+    float n3 = Var_Read_SensorLiveNox(2), o3 = Var_Read_SensorLiveO2(2);
+    uint16_t st1 = Var_Read_SensorStatus(0);
+    uint16_t st2 = Var_Read_SensorStatus(1);
+    uint16_t st3 = Var_Read_SensorStatus(2);
+
+    OLED_NewFrame();
+    snprintf(buf, sizeof(buf), "Time:    %lus", (unsigned long)time_1s);
+    OLED_PrintASCIIString(0, 1, buf, &afont8x6, OLED_COLOR_NORMAL);
+    snprintf(buf, sizeof(buf), "S1NOx %5.2f O2 %5.2f     ", (double)n1, (double)o1);
+    OLED_PrintASCIIString(0, 10, buf, &afont8x6, OLED_COLOR_NORMAL);
+    snprintf(buf, sizeof(buf), "S2NOx %5.2f O2 %5.2f     ", (double)n2, (double)o2);
+    OLED_PrintASCIIString(0, 20, buf, &afont8x6, OLED_COLOR_NORMAL);
+    snprintf(buf, sizeof(buf), "S3NOx %5.2f O2 %5.2f     ", (double)n3, (double)o3);
+    OLED_PrintASCIIString(0, 30, buf, &afont8x6, OLED_COLOR_NORMAL);
+    snprintf(buf, sizeof(buf), "OutNOx %5.2f O2 %5.2f    ", (double)NOx_ppm, (double)O2_pct);
+    OLED_PrintASCIIString(0, 40, buf, &afont8x6, OLED_COLOR_NORMAL);
+    {
+        uint16_t out_st = Var_Read_OutputChStatus();
+        snprintf(buf, sizeof(buf), "O%03X", (unsigned)out_st);
+        OLED_PrintASCIIString(0, 50, buf, &afont8x6,
+                              (out_st == 0x1FFu) ? OLED_COLOR_NORMAL : OLED_COLOR_REVERSED);
+        snprintf(buf, sizeof(buf), "1%03X", (unsigned)st1);
+        OLED_PrintASCIIString(32, 50, buf, &afont8x6,
+                              (st1 == 0x1FFu) ? OLED_COLOR_NORMAL : OLED_COLOR_REVERSED);
+        snprintf(buf, sizeof(buf), "2%03X", (unsigned)st2);
+        OLED_PrintASCIIString(64, 50, buf, &afont8x6,
+                              (st2 == 0x1FFu) ? OLED_COLOR_NORMAL : OLED_COLOR_REVERSED);
+        snprintf(buf, sizeof(buf), "3%03X", (unsigned)st3);
+        OLED_PrintASCIIString(96, 50, buf, &afont8x6,
+                              (st3 == 0x1FFu) ? OLED_COLOR_NORMAL : OLED_COLOR_REVERSED);
+    }
+    OLED_ShowFrame();
+}
+#endif
+
 /* ----- NOx receive task: dequeue J1939_RX_ITEM (channel+msg), update channel, strategy, 4-20mA, heater ----- */
 void NOxReceive(void *argument)
 {
     J1939_RX_ITEM item;
     TxMsg_Init(&TxMessage);
+    uint32_t last_mcp_heater_tick = 0u;
+    uint32_t next_mcp_heater_try_tick = 0u;
 
     for (;;) {
-        if (xQueueReceive(Rx_QueueHandle, &item, pdMS_TO_TICKS(100)) == pdPASS) {
-            NOx_HandleOne(&item.msg, item.channel_index);
+        uint8_t can1_drain = 0u;
+        if (xQueueReceive(Rx_QueueHandle, &item, pdMS_TO_TICKS(NOX_RECEIVE_QUEUE_WAIT_MS)) == pdPASS) {
+            do {
+                NOx_HandleOne(&item.msg, item.channel_index);
+                can1_drain++;
+            } while (can1_drain < NOX_CAN1_RX_DRAIN_LIMIT &&
+                     xQueueReceive(Rx_QueueHandle, &item, 0) == pdPASS);
         }
         /* 第二路 CAN（MCP2515）接收：SA 0x52 → 通道 2（Electrical Interface 18F00F52h） */
+#if NOX_USE_MCP2515
         if (MCP2515_IsReady()) {
             MCP2515_CAN_Frame_t rx;
-            while (MCP2515_Receive(&rx) == 1) {
+            uint8_t drain = 0u;
+            while (drain < NOX_MCP2515_RX_DRAIN_LIMIT && MCP2515_Receive(&rx) == 1) {
+                drain++;
                 if (rx.is_ext_id && rx.id == NOX_MCP2515_RX_ID && rx.len >= 8) {
-                    J1939_RX_ITEM can2_item;
-                    can2_item.channel_index = 2u;
-                    can2_item.msg.Array[0] = (j1939_uint8_t)(rx.id >> 24);
-                    can2_item.msg.Array[1] = (j1939_uint8_t)(rx.id >> 16);
-                    can2_item.msg.Array[2] = (j1939_uint8_t)(rx.id >> 8);
-                    can2_item.msg.Array[3] = (j1939_uint8_t)(rx.id);
-                    can2_item.msg.Mxe.DataLength = 8;
+                    J1939_MESSAGE can2_msg;
+                    can2_msg.Array[0] = (j1939_uint8_t)(rx.id >> 24);
+                    can2_msg.Array[1] = (j1939_uint8_t)(rx.id >> 16);
+                    can2_msg.Array[2] = (j1939_uint8_t)(rx.id >> 8);
+                    can2_msg.Array[3] = (j1939_uint8_t)(rx.id);
+                    can2_msg.Mxe.DataLength = 8;
                     for (int i = 0; i < 8; i++)
-                        can2_item.msg.Mxe.Data[i] = rx.data[i];
-                    (void)xQueueSend(Rx_QueueHandle, &can2_item, pdMS_TO_TICKS(10));
+                        can2_msg.Mxe.Data[i] = rx.data[i];
+                    NOx_HandleOne(&can2_msg, 2u);
                 }
             }
         }
+#endif
+
+        NoxChannel_UpdateCommTimeouts(HAL_GetTick());
 
         /* P34: mode 0 single (high byte = ch), mode 1 主从 (high byte = 主 ch), mode 2 fusion (no 主). */
         {
@@ -128,51 +183,57 @@ void NOxReceive(void *argument)
             NoxSensor_To4_20mA(nox_out, o2_out, electricity_data_buf);
         }
 
-#if 0  /* OLED: S1/S2/S3 + 当前输出（已禁用） */
+#if 0
         {
             uint8_t buf[28];
             float n1 = Var_Read_SensorLiveNox(0), o1 = Var_Read_SensorLiveO2(0);
             float n2 = Var_Read_SensorLiveNox(1), o2 = Var_Read_SensorLiveO2(1);
-            uint16_t st1 = Var_Read_SensorStatus(0), st2 = Var_Read_SensorStatus(1);
-            NoxChannel_t *c3 = &g_noxChannels[2];
-            (void)st1; (void)st2;
+            float n3 = Var_Read_SensorLiveNox(2), o3 = Var_Read_SensorLiveO2(2);
+            uint16_t st3 = Var_Read_SensorStatus(2);
             snprintf((char *)buf, sizeof(buf), "S1 NOx %5.2f O2 %5.2f     ", (double)n1, (double)o1);
             OLED_PrintASCIIString(0, 10, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
             snprintf((char *)buf, sizeof(buf), "S2 NOx %5.2f O2 %5.2f     ", (double)n2, (double)o2);
-            OLED_PrintASCIIString(0, 18, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
-            snprintf((char *)buf, sizeof(buf), "S3(CAN2) %5.2f %5.2f %u  ", (double)c3->nox_ppm, (double)c3->o2_pct, (unsigned)c3->state);
-            OLED_PrintASCIIString(0, 26, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
+            OLED_PrintASCIIString(0, 20, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
+            snprintf((char *)buf, sizeof(buf), "S3 NOx %5.2f O2 %5.2f     ", (double)n3, (double)o3);
+            OLED_PrintASCIIString(0, 30, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
             snprintf((char *)buf, sizeof(buf), "Out NOx %5.2f O2 %5.2f    ", (double)NOx_ppm, (double)O2_pct);
-            OLED_PrintASCIIString(0, 34, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
-            snprintf((char *)buf, sizeof(buf), "state: %u                 ", (unsigned)Var_Read_OutputChStatus());
+            OLED_PrintASCIIString(0, 40, (char *)buf, &afont8x6, OLED_COLOR_NORMAL);
+            snprintf((char *)buf, sizeof(buf), "state: %u S3st: %u         ", (unsigned)Var_Read_OutputChStatus(), (unsigned)st3);
             OLED_ColorMode c = (Var_Read_OutputChStatus() == 0x1FFu) ? OLED_COLOR_NORMAL : OLED_COLOR_REVERSED;
-            OLED_PrintASCIIString(0, 42, (char *)buf, &afont8x6, c);
+            OLED_PrintASCIIString(0, 50, (char *)buf, &afont8x6, c);
         }
 #endif
 
         /* Heater command: 第一路 CAN 发送；第二路 CAN（MCP2515）也发送 18FEDF55（文档 4.2 节）. */
         J1939_CAN_Transmit(&TxMessage);
+#if NOX_USE_MCP2515
         if (MCP2515_IsReady()) {
-            MCP2515_CAN_Frame_t heater;
-            heater.id = NOX_MCP2515_HEATER_ID;
-            heater.is_ext_id = true;
-            heater.len = 8;
-            for (int i = 0; i < 8; i++)
-                heater.data[i] = HeaterData[i];
-            (void)MCP2515_Send(&heater);
+            uint32_t now = HAL_GetTick();
+            if ((int32_t)(now - next_mcp_heater_try_tick) >= 0 &&
+                (now - last_mcp_heater_tick) >= NOX_MCP2515_HEATER_PERIOD_MS) {
+                MCP2515_CAN_Frame_t heater;
+                heater.id = NOX_MCP2515_HEATER_ID;
+                heater.is_ext_id = true;
+                heater.len = 8;
+                for (int i = 0; i < 8; i++)
+                    heater.data[i] = HeaterData[i];
+                last_mcp_heater_tick = now;
+                if (MCP2515_Send(&heater) != 0)
+                    next_mcp_heater_try_tick = now + NOX_MCP2515_HEATER_RETRY_MS;
+            }
         }
+#endif
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(NOX_RECEIVE_LOOP_DELAY_MS));
     }
 }
 
-/* ----- Default task: calibration, alarm, blowback, run time; OLED 已禁用 ----- */
+/* ----- Default task: calibration, alarm, blowback, run time; OLED 见 APP_USE_OLED ----- */
 void NOxDefault(void *argument)
 {
     Blowback_Init();
 
     for (;;) {
-        /* Hold mutex across Var_Read_* here; same lock order as elsewhere to avoid deadlock. */
         LOCK_VAR();
         Calibration_NOx(&NOx_parameter, &NOx_parameter1);
         Calibration_O2(&O2_parameter, &O2_parameter1);
@@ -180,12 +241,10 @@ void NOxDefault(void *argument)
 
         Alarm_Update();
         Blowback_Update();
+        Modbus_AutoSuctionValvesUpdate();
 
-#if 0
-        char buf[32];
-        snprintf(buf, sizeof(buf), "Time:    %lus", (unsigned long)time_1s);
-        OLED_PrintASCIIString(0, 1, buf, &afont8x6, OLED_COLOR_NORMAL);
-        OLED_ShowFrame();
+#if APP_USE_OLED
+        NOx_OledRefresh();
 #endif
 
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -199,6 +258,7 @@ void ModBusSlave(void *argument)
     BLOW_CONTROL(1, 0);
     NoxChannel_Init();
     /* 第二路 CAN（MCP2515）：250 kbps；硬件滤波目标 PGN+F0 SA52 */
+#if NOX_USE_MCP2515
     if (MCP2515_Init(MCP2515_BAUD_250K) == 0) {
 #if NOX_MCP2515_BOOT_DEBUG
         uint8_t canstat = 0, canctrl = 0, cnf1 = 0, cnf2 = 0, cnf3 = 0;
@@ -213,6 +273,7 @@ void ModBusSlave(void *argument)
 
         (void)MCP2515_SetFilter(NOX_MCP2515_RX_ID, 0x1FFFFFFFu, true);
     }
+#endif
     MDSUARTx.Init.BaudRate = (uint32_t)SBAUD485;
     HAL_UART_Init(&MDSUARTx);
     MODRx_SemaphoreHandle = xSemaphoreCreateBinary();

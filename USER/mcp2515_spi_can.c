@@ -5,6 +5,7 @@
  ******************************************************************************
  */
 #include "mcp2515_spi_can.h"
+#include "app_config.h"
 #include "main.h"
 #include "spi.h"
 #include <string.h>
@@ -89,14 +90,30 @@
 #define MCP2515_CANINTE_RX0IE    0x01
 #define MCP2515_CANINTE_RX1IE    0x02
 
-/* 板级原理图为 MCP2515 外挂 8 MHz 晶振。
- * 说明：现网仅使用 250 kbps（J1939）。此处将 250k 映射到经验证可工作的
- * 寄存器组（原 16MHz 表中的 500k 组，在 8MHz 下等效 250k）。
+/* MCP2515 oscillator frequency on the SPI-CAN module.
+ * This project uses J1939/NOx at 250 kbps. The tested modules use 16 MHz.
+ * Change this only if the crystal can on the module is different.
  */
-static const uint8_t cnf_125k[]  = { 0x03, 0xFA, 0x87 }; /* 125 kbps */
-static const uint8_t cnf_250k[]  = { 0x00, 0xFA, 0x06 }; /* 8MHz 晶振下等效 250 kbps */
-static const uint8_t cnf_500k[]  = { 0x00, 0xFA, 0x06 }; /* 500 kbps, 16 Tq */
-static const uint8_t cnf_1000k[] = { 0x00, 0xD0, 0x82 }; /* 1 Mbps */
+#define MCP2515_OSC_FREQ_HZ 8000000UL
+
+#if MCP2515_OSC_FREQ_HZ == 16000000UL
+static const uint8_t cnf_125k[]  = { 0x03, 0xBA, 0x03 }; /* 125.000 kbps, 16 TQ, SP=75% */
+static const uint8_t cnf_250k[]  = { 0x01, 0xBA, 0x03 }; /* 250.000 kbps, 16 TQ, SP=75% */
+static const uint8_t cnf_500k[]  = { 0x00, 0xBA, 0x03 }; /* 500.000 kbps, 16 TQ, SP=75% */
+static const uint8_t cnf_1000k[] = { 0x00, 0x98, 0x01 }; /* 1.000 Mbps, 8 TQ, SP=75% */
+#elif MCP2515_OSC_FREQ_HZ == 8000000UL
+static const uint8_t cnf_125k[]  = { 0x01, 0xBA, 0x03 }; /* 125.000 kbps, 16 TQ, SP=75% */
+static const uint8_t cnf_250k[]  = { 0x00, 0xBA, 0x03 }; /* 250.000 kbps, 16 TQ, SP=75% */
+static const uint8_t cnf_500k[]  = { 0x00, 0x98, 0x01 }; /* 500.000 kbps, 8 TQ, SP=75% */
+static const uint8_t cnf_1000k[] = { 0x00, 0x80, 0x00 }; /* 800 kbps max practical with 8 MHz */
+#elif MCP2515_OSC_FREQ_HZ == 11059200UL
+static const uint8_t cnf_125k[]  = { 0x01, 0xBF, 0x04 }; /* 125.673 kbps, +0.54%, 22 TQ */
+static const uint8_t cnf_250k[]  = { 0x00, 0xBF, 0x04 }; /* 251.345 kbps, +0.54%, 22 TQ */
+static const uint8_t cnf_500k[]  = { 0x00, 0x9A, 0x02 }; /* 502.691 kbps, +0.54%, 11 TQ */
+static const uint8_t cnf_1000k[] = { 0x00, 0x88, 0x01 }; /* 921.600 kbps, not exact 1 Mbps */
+#else
+#error "Unsupported MCP2515_OSC_FREQ_HZ"
+#endif
 
 static const uint8_t *const cnf_tables[] = {
 	cnf_125k, cnf_250k, cnf_500k, cnf_1000k
@@ -116,7 +133,7 @@ static uint8_t s_last_rec = 0;
 static uint8_t spi_xfer_byte(uint8_t tx)
 {
 	uint8_t rx = 0xFFu;
-	if (HAL_SPI_TransmitReceive(s_spi, &tx, &rx, 1, 50) != HAL_OK)
+	if (HAL_SPI_TransmitReceive(s_spi, &tx, &rx, 1, MCP2515_SPI_TIMEOUT_MS) != HAL_OK)
 		return 0xFFu;
 	return rx;
 }
@@ -199,10 +216,12 @@ static void mcp2515_bit_modify(uint8_t addr, uint8_t mask, uint8_t val)
 
 static void mcp2515_reset(void)
 {
+	CS_HIGH();
+	HAL_Delay(1);
 	CS_LOW();
 	spi_xfer_byte(MCP2515_INS_RESET);
 	CS_HIGH();
-	HAL_Delay(1);
+	HAL_Delay(10);
 }
 
 static int mcp2515_enter_config(void)
@@ -258,13 +277,14 @@ int MCP2515_Init(MCP2515_Baud_t baud)
 	mcp2515_write_reg(MCP2515_CNF1, cnf[0]);
 	mcp2515_write_reg(MCP2515_CNF2, cnf[1]);
 	mcp2515_write_reg(MCP2515_CNF3, cnf[2]);
-	mcp2515_set_one_shot(true);
+	mcp2515_set_one_shot(false);
 
 	/* 接收：RXB0 接受任意，溢出到 RXB1；使能 RX0/RX1 中断 */
 	mcp2515_write_reg(MCP2515_RXB0CTRL, MCP2515_RXB0CTRL_RXM_ANY | MCP2515_RXB0CTRL_BUKT);
 	mcp2515_write_reg(MCP2515_RXB1CTRL, MCP2515_RXB0CTRL_RXM_ANY);
 	mcp2515_write_reg(MCP2515_CANINTE, MCP2515_CANINTE_RX0IE | MCP2515_CANINTE_RX1IE);
 	mcp2515_write_reg(MCP2515_CANINTF, 0x00);
+	mcp2515_write_reg(MCP2515_TXB0CTRL, 0x00);
 
 	mcp2515_set_normal();
 	HAL_Delay(1);
@@ -298,7 +318,7 @@ int MCP2515_Send(const MCP2515_CAN_Frame_t *frame)
 	uint32_t t = 0;
 	while (mcp2515_read_reg(MCP2515_TXB0CTRL) & MCP2515_TXBnCTRL_TXREQ) {
 		HAL_Delay(1);
-		if (++t > 50) {
+		if (++t > MCP2515_TX_BUSY_TIMEOUT_MS) {
 			mcp2515_abort_all_tx();
 			mcp2515_capture_tx_diag();
 			return -2;
@@ -327,13 +347,13 @@ int MCP2515_Send(const MCP2515_CAN_Frame_t *frame)
 	CS_HIGH();
 
 	/* 等待本次发送结束，再判断是否真正发上总线 */
-	for (t = 0; t < 20u; t++) {
+	for (t = 0; t < MCP2515_TX_COMPLETE_TIMEOUT_MS; t++) {
 		txb0ctrl = mcp2515_read_reg(MCP2515_TXB0CTRL);
 		if ((txb0ctrl & MCP2515_TXBnCTRL_TXREQ) == 0u)
 			break;
 		HAL_Delay(1);
 	}
-	if (t >= 20u) {
+	if (t >= MCP2515_TX_COMPLETE_TIMEOUT_MS) {
 		mcp2515_abort_all_tx();
 		mcp2515_capture_tx_diag();
 		return -4; /* 发送请求长时间未结束 */

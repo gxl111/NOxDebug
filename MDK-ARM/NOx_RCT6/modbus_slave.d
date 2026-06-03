@@ -50,5 +50,6 @@ nox_rct6\modbus_slave.o: ..\USER\modbus_flash.h
 nox_rct6\modbus_slave.o: ..\USER\nox_channel.h
 nox_rct6\modbus_slave.o: ..\USER\app_config.h
 nox_rct6\modbus_slave.o: ..\USER\nox_sensor.h
+nox_rct6\modbus_slave.o: ..\USER\blowback.h
 nox_rct6\modbus_slave.o: F:/Keil_v5/ARM/ARMCC/include/string.h
 nox_rct6\modbus_slave.o: ../Core/Inc/tim.h

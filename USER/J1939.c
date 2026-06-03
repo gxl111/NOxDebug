@@ -42,8 +42,12 @@ void J1939_Initialization(void)
     }
 
     J1939_Address = J1939_STARTING_ADDRESS;
-    HAL_CAN_Start(&hcan);
-    HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
+    if (HAL_CAN_Start(&hcan) != HAL_OK) {
+        Error_Handler();
+    }
+    if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) {
+        Error_Handler();
+    }
 }
 
 

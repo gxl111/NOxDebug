@@ -59,6 +59,8 @@ nox_rct6\nox.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/timers.h
 nox_rct6\nox.o: ..\USER\blowback.h
 nox_rct6\nox.o: ..\USER\calibration.h
 nox_rct6\nox.o: ..\USER\alarm.h
+nox_rct6\nox.o: ../HARDWARE/oled.h
+nox_rct6\nox.o: ../HARDWARE/font.h
 nox_rct6\nox.o: ../HARDWARE/sdcard.h
 nox_rct6\nox.o: ../Core/Inc/spi.h
 nox_rct6\nox.o: ../Middlewares/Third_Party/FatFs/src/ff.h

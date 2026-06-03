@@ -33,7 +33,7 @@ SemaphoreHandle_t OLED_MutexHandle;
 void OLED_Send(uint8_t *data, uint8_t len)
 {
    if(pdPASS==xSemaphoreTake(OLED_MutexHandle, portMAX_DELAY)) {
-        HAL_I2C_Master_Transmit(&hi2c1, OLED_ADDRESS, data, len, HAL_MAX_DELAY);       
+        HAL_I2C_Master_Transmit(&hi2c1, OLED_ADDRESS, data, len, 50u);
        xSemaphoreGive(OLED_MutexHandle);
    }  
  
@@ -58,6 +58,7 @@ void OLED_SendCmd(uint8_t cmd)
 void OLED_Init()
 {
   OLED_MutexHandle =xSemaphoreCreateMutex();
+  OLED_NewFrame();
   OLED_SendCmd(0xAE); /* display off */
 
   OLED_SendCmd(0x20);
@@ -106,6 +107,8 @@ void OLED_Init()
   OLED_ShowFrame();
 
   OLED_SendCmd(0xAF); /* display on */
+  OLED_NewFrame();
+  OLED_ShowFrame();
 
 }
 

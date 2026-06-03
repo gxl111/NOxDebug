@@ -1,7 +1,7 @@
 /*
  * modbus_flash.c - Save/load sensor calibration (S1/S2/S3) + blowback interval/duration per channel.
  * Layout v2: 36 floats + magic BLW3 + 6 uint32 (S1/S2/S3 blow int/dur).
- * Legacy v1: 24 floats + magic BLWF + 4 uint32 (S1/S2 blow only) — still loaded if word[36] != V2 magic.
+ * Older format: 24 floats + magic BLWF + 4 uint32 (S1/S2 blow only) — still loaded if word[36] != V2 magic.
  * Blow stagger remains in blowback.c (BLOW_STAGGER_SEC), not in Flash.
  */
 #include "modbus_flash.h"
@@ -50,7 +50,7 @@ static void clamp_duration_u16(uint32_t *p, uint32_t interval)
 {
     if (*p < BLOW_DURATION_MIN_S)
         *p = BLOW_DURATION_MIN_S;
-    if (interval > 0u && interval <= 65534u && *p >= interval)
+    if (interval > BLOW_DURATION_MIN_S && interval <= 65534u && *p >= interval)
         *p = interval - 1u;
 }
 

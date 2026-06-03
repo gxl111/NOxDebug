@@ -37,6 +37,9 @@
 /** Stagger between ch0 and ch1 periodic blowback start (s). Ch1 fires at (n*interval + stagger). */
 #define BLOW_STAGGER_SEC        300u
 
+/** No J1939 NOx frame on this channel for this long => valid=0, state bit9 link-lost (see README 5.4). */
+#define NOX_CAN_SILENCE_TIMEOUT_MS   2000u
+
 /* 4-20 mA output: full-scale NOx (ppm) and O2 (%) */
 #define NOX_FS_PPM   2500.0f
 #define O2_FS_PCT    25.0f
@@ -49,6 +52,16 @@
 #define J1939_HEATER_PAYLOAD_TAIL  0x55u
 /* 1=使能 MCP2515 第二路 CAN；0=禁用 */
 #define NOX_USE_MCP2515        1
+/* Keep the MCP2515 path short-fail so CAN2 issues cannot stall CAN1/OLED updates. */
+#define MCP2515_SPI_TIMEOUT_MS          2u
+#define MCP2515_TX_BUSY_TIMEOUT_MS      3u
+#define MCP2515_TX_COMPLETE_TIMEOUT_MS  5u
+#define NOX_CAN1_RX_DRAIN_LIMIT         8u
+#define NOX_MCP2515_RX_DRAIN_LIMIT      4u
+#define NOX_MCP2515_HEATER_PERIOD_MS    250u
+#define NOX_MCP2515_HEATER_RETRY_MS     1000u
+#define NOX_RECEIVE_QUEUE_WAIT_MS       10u
+#define NOX_RECEIVE_LOOP_DELAY_MS       20u
 
 /* Multi-sensor: max channels (for future 3-way extension) */
 #define NOX_SENSOR_COUNT_MAX   3u
@@ -78,5 +91,23 @@ typedef enum {
  * GPIO pins reserved in main.h; change when hardware is defined.
  */
 #define SENSOR_POWER_GPIO_ENABLE   0
+
+/*
+ * Relay hardware test mode:
+ * 1 = after GPIO init, skip normal app and continuously test J1-J9 and JC1-JC3:
+ *     all off -> each relay on/off in order -> all on -> all off.
+ * 0 = normal firmware.
+ */
+#define RELAY_TEST_MODE       0
+#define RELAY_TEST_STEP_MS    700u
+#define RELAY_TEST_GAP_MS     300u
+
+/* Debounce automatic suction relay changes caused by transient sensor status flips. */
+#define SUCTION_VALVE_DEBOUNCE_MS   1000u
+
+/*
+ * OLED（I2C1 PB6/PB7）：1 = 编译并周期性刷新 S1/S2/S3、输出与运行时间；0 = 不引用 oled 驱动。
+ */
+#define APP_USE_OLED   1
 
 #endif /* __APP_CONFIG_H */

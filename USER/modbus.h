@@ -27,6 +27,7 @@
 /* RS485 direction state */
 typedef struct {
     uint8_t isSending;
+    uint32_t txStartTick;
 } RS485_State_t;
 
 typedef struct
@@ -48,9 +49,22 @@ extern uint8_t rx_data;
 extern uint8_t rx_data_h;
 extern RS485_State_t rs485_state;
 extern RS485_State_t rs485_state_h;
+extern volatile uint32_t g_modbus_uart1_error_count;
+extern volatile uint32_t g_modbus_uart1_last_error;
+extern volatile uint32_t g_modbus_uart1_last_sr;
+extern volatile uint32_t g_modbus_uart1_rx_byte_count;
+extern volatile uint32_t g_modbus_uart1_tx_cplt_count;
+extern volatile uint32_t g_modbus_uart1_tx_watchdog_count;
+extern volatile uint32_t g_modbus_uart5_error_count;
+extern volatile uint32_t g_modbus_uart5_last_error;
+extern volatile uint32_t g_modbus_uart5_last_sr;
+extern volatile uint32_t g_modbus_uart5_rx_byte_count;
+extern volatile uint32_t g_modbus_uart5_tx_cplt_count;
+extern volatile uint32_t g_modbus_uart5_tx_watchdog_count;
 
 extern uint16_t BEBufToUint16(uint8_t *_pBuf);
 extern uint16_t CRC16_Modbus(uint8_t *_pBuf, uint16_t _usLen);
 extern void RS485_Enable_TX(GPIO_TypeDef* port ,uint16_t pin) ;
 extern void RS485_Enable_RX(GPIO_TypeDef* port ,uint16_t pin);
+extern void Modbus_ServiceTxWatchdog(void);
 #endif
