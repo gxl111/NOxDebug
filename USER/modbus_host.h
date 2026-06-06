@@ -5,20 +5,19 @@
 #include "semphr.h"
 #include "modbus.h"
 #include "timers.h"
+#include "app_config.h"
 
 
 #define H_RX_BUF_SIZE		64
 #define H_TX_BUF_SIZE      	128
-
-
-
-
 #define REG_P01		0x000A
 #define REG_P02		0x000B
+#define REG_P06     0x000F
 #define REG_P03		0x0032
 #define REG_P04		0x0033
 #define REG_P05		0x003D
 #define REG_PXX 	REG_P05
+#define AO_MODULE_ADDR_REG  REG_P03
 
 typedef struct
 {
@@ -58,6 +57,8 @@ typedef struct
 extern VAR_T_H g_tVar_h;
 /* 4-20 mA module register values (NOx/O2 codes), filled by NOx task */
 extern uint8_t electricity_data_buf[4];
+/* 6-channel 4-20 mA module values: S1 NOx/O2, S2 NOx/O2, S3 NOx/O2. */
+extern uint8_t electricity_data_buf_6ch[12];
 
 extern SemaphoreHandle_t RS485send_SemaphoreHandle;
 extern QueueHandle_t MODHx_SemaphoreHandle;

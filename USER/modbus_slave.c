@@ -19,10 +19,9 @@
 */
 
 
-// Slave address (can override via SD config)
-uint8_t SADDR485=1;
-// Baud rate
-uint32_t SBAUD485=115200;
+// Slave address and baud rate can be overridden by SD config.
+uint8_t SADDR485 = MODBUS_SLAVE_DEFAULT_ADDR;
+uint32_t SBAUD485 = MODBUS_SLAVE_DEFAULT_BAUD;
 
 
 
@@ -802,7 +801,7 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
                 value = (uint16_t)(g_tVar.work_mode & 0xFFu);
                 break;
             case SLAVE_REG_OUTPUT_SENSOR:
-                /* P35 R-only: 0b01=S0 0b10=S1 0b11=fusion 0b100=S2(CAN2) 0b00=fault */
+                /* P35 R-only: 0b01=S1/ch0 0b10=S2/ch1 0b11=fusion 0b100=S3/ch2(CAN2) 0b00=fault */
                 value = (uint16_t)NoxChannel_GetOutputSensorReg();
                 break;
             default: UNLOCK_VAR(); return 0;
@@ -820,6 +819,18 @@ static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
         LOCK_VAR();
         s = &g_tVar.S3;
         goto sensor_read;
+    } else if (addr >= SLAVE_REG_MA_S1_NOX && addr <= SLAVE_REG_MA_S3_O2) {
+        LOCK_VAR();
+        switch (addr) {
+            case SLAVE_REG_MA_S1_NOX: value = g_tVar.ma_s1_nox; break;
+            case SLAVE_REG_MA_S1_O2:  value = g_tVar.ma_s1_o2;  break;
+            case SLAVE_REG_MA_S2_NOX: value = g_tVar.ma_s2_nox; break;
+            case SLAVE_REG_MA_S2_O2:  value = g_tVar.ma_s2_o2;  break;
+            case SLAVE_REG_MA_S3_NOX: value = g_tVar.ma_s3_nox; break;
+            case SLAVE_REG_MA_S3_O2:  value = g_tVar.ma_s3_o2;  break;
+            default: UNLOCK_VAR(); return 0;
+        }
+        UNLOCK_VAR();
     } else {
         return 0;
     }
@@ -975,6 +986,20 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
         s = &g_tVar.S2;
     else if (addr >= SENSOR_BASE_3 && addr <= SLAVE_REG_S3_VALVE_CAL)
         s = &g_tVar.S3;
+    else if (addr >= SLAVE_REG_MA_S1_NOX && addr <= SLAVE_REG_MA_S3_O2) {
+        LOCK_VAR();
+        switch (addr) {
+            case SLAVE_REG_MA_S1_NOX: g_tVar.ma_s1_nox = value; break;
+            case SLAVE_REG_MA_S1_O2:  g_tVar.ma_s1_o2  = value; break;
+            case SLAVE_REG_MA_S2_NOX: g_tVar.ma_s2_nox = value; break;
+            case SLAVE_REG_MA_S2_O2:  g_tVar.ma_s2_o2  = value; break;
+            case SLAVE_REG_MA_S3_NOX: g_tVar.ma_s3_nox = value; break;
+            case SLAVE_REG_MA_S3_O2:  g_tVar.ma_s3_o2  = value; break;
+            default: UNLOCK_VAR(); return 0;
+        }
+        UNLOCK_VAR();
+        return 1;
+    }
     else
         return 0;
 
@@ -1111,6 +1136,38 @@ void Var_Write_MaNox(uint16_t value) { VAR_WRITE_U16(ma_nox, value); }
 uint16_t Var_Read_MaNox(void) { uint16_t r; VAR_READ_U16(ma_nox, r); return r; }
 void Var_Write_MaO2(uint16_t value) { VAR_WRITE_U16(ma_o2, value); }
 uint16_t Var_Read_MaO2(void) { uint16_t r; VAR_READ_U16(ma_o2, r); return r; }
+void Var_Write_MaSensorNox(uint8_t ch, uint16_t value) {
+    LOCK_VAR();
+    if (ch == 0u) g_tVar.ma_s1_nox = value;
+    else if (ch == 1u) g_tVar.ma_s2_nox = value;
+    else if (ch == 2u) g_tVar.ma_s3_nox = value;
+    UNLOCK_VAR();
+}
+uint16_t Var_Read_MaSensorNox(uint8_t ch) {
+    uint16_t r = 0u;
+    LOCK_VAR();
+    if (ch == 0u) r = g_tVar.ma_s1_nox;
+    else if (ch == 1u) r = g_tVar.ma_s2_nox;
+    else if (ch == 2u) r = g_tVar.ma_s3_nox;
+    UNLOCK_VAR();
+    return r;
+}
+void Var_Write_MaSensorO2(uint8_t ch, uint16_t value) {
+    LOCK_VAR();
+    if (ch == 0u) g_tVar.ma_s1_o2 = value;
+    else if (ch == 1u) g_tVar.ma_s2_o2 = value;
+    else if (ch == 2u) g_tVar.ma_s3_o2 = value;
+    UNLOCK_VAR();
+}
+uint16_t Var_Read_MaSensorO2(uint8_t ch) {
+    uint16_t r = 0u;
+    LOCK_VAR();
+    if (ch == 0u) r = g_tVar.ma_s1_o2;
+    else if (ch == 1u) r = g_tVar.ma_s2_o2;
+    else if (ch == 2u) r = g_tVar.ma_s3_o2;
+    UNLOCK_VAR();
+    return r;
+}
 void Var_Write_WorkMode(uint16_t value) { VAR_WRITE_U16(work_mode, value); }
 uint16_t Var_Read_WorkMode(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint16_t)(r & 0x03u); }
 uint8_t Var_Read_SingleChannelIndex(void) { uint16_t r; VAR_READ_U16(work_mode, r); return (uint8_t)((r >> 8) & 3u); }

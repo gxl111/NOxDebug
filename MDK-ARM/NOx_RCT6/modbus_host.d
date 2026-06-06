@@ -48,6 +48,7 @@ nox_rct6\modbus_host.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/task.
 nox_rct6\modbus_host.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h
 nox_rct6\modbus_host.o: ..\USER\modbus.h
 nox_rct6\modbus_host.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/timers.h
+nox_rct6\modbus_host.o: ..\USER\app_config.h
 nox_rct6\modbus_host.o: ..\USER\modbus_slave.h
 nox_rct6\modbus_host.o: ../Core/Inc/gpio.h
 nox_rct6\modbus_host.o: ..\USER\modbus_flash.h

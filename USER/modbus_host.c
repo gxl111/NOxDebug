@@ -1,7 +1,8 @@
 /**
  * @file    modbus_host.c
- * @brief   Modbus RTU master: writes 4-20 mA output to external slave (REG_P01),
- *          then reads back for verification. Uses UART5/RS485 and software timer for reply timeout.
+ * @brief   Modbus RTU master: writes 4-20 mA output to external AO modules.
+ *          Optional readback is controlled by AO_MODULE_READBACK_ENABLE.
+ *          Uses UART5/RS485 and software timer for reply timeout.
  */
 #include "main.h"
 #include <string.h>
@@ -10,13 +11,8 @@
 #include "modbus_host.h"
 #include "modbus_slave.h"
 
-uint8_t SlaveAddr = 0x01;
-uint32_t HBAUD485 = 9600;
-
-#define TIMEOUT_MS   1000
-#define RETRY_NUM    1
-
-
+uint8_t SlaveAddr = AO_MODULE_SLAVE_1_ADDR;
+uint32_t HBAUD485 = MODBUS_HOST_DEFAULT_BAUD;
 
 void (*s_TIM_CallBack2)(void);
 
@@ -40,6 +36,10 @@ void MODH_Poll(void);
 
 static void MODH_Read_06H(void);
 static void MODH_Read_10H(void);
+static uint8_t MODH_ReadParam_03H_Addr(uint8_t _addr, uint16_t _reg, uint16_t _num);
+static uint8_t MODH_WriteParam_06H_Addr(uint8_t _addr, uint16_t _reg, uint16_t _value);
+static uint8_t MODH_WriteParam_10H_Addr(uint8_t _addr, uint16_t _reg, uint8_t _num, uint8_t *_buf);
+static void MODH_UpdateReadback(uint16_t reg, uint16_t value);
 
 void Start_Receive_H(void) {
     HAL_UART_Receive_IT(&MDSUARTxH, &rx_data_h, 1);
@@ -140,6 +140,7 @@ void MODH_Send10H(uint8_t _addr, uint16_t _reg, uint8_t _num, uint8_t *_buf)
 		g_tModH.TxBuf[g_tModH.TxCount++] = _buf[i];
 	}
 
+	g_tModH.fAck10H = 0;		/* clear until response matches */
 	MODH_SendWithCRC();
 }
 
@@ -300,27 +301,57 @@ static void MODH_Read_03H(void)
 	
 	if (g_tModH.RxCount > 0)
 	{
+        if (g_tModH.RxBuf[0] != SlaveAddr)
+            return;
 		bytes = g_tModH.RxBuf[2];	
+        if (bytes != (uint8_t)(g_tModH.RegNum * 2u))
+            return;
         p = &g_tModH.RxBuf[3];
         for (int i=0;i<bytes/2;i++){
+            uint16_t reg = (uint16_t)(g_tModH.Reg03H + i);
+            uint16_t value;
             
-            switch (g_tModH.Reg03H+i)
+            switch (reg)
             {
                 case REG_P01:
 
-                    g_tVar_h.P01 = BEBufToUint16(p); p += 2;		
+                    value = BEBufToUint16(p); p += 2;
+                    if (SlaveAddr == AO_MODULE_SLAVE_1_ADDR)
+                        g_tVar_h.P01 = value;
 
-                    g_tVar.ma_nox=g_tVar_h.P01;
+                    MODH_UpdateReadback(reg, value);
                 
                     g_tModH.fAck03H = 1;
                 
                     break;
                 case REG_P02:
  
-                    g_tVar_h.P02 = BEBufToUint16(p); p += 2;		
+                    value = BEBufToUint16(p); p += 2;
+                    if (SlaveAddr == AO_MODULE_SLAVE_1_ADDR)
+                        g_tVar_h.P02 = value;
 
-                    g_tVar.ma_o2=g_tVar_h.P02;
+                    MODH_UpdateReadback(reg, value);
                 
+                    g_tModH.fAck03H = 1;
+                    break;
+                case 0x000C:
+                    value = BEBufToUint16(p); p += 2;
+                    MODH_UpdateReadback(reg, value);
+                    g_tModH.fAck03H = 1;
+                    break;
+                case 0x000D:
+                    value = BEBufToUint16(p); p += 2;
+                    MODH_UpdateReadback(reg, value);
+                    g_tModH.fAck03H = 1;
+                    break;
+                case 0x000E:
+                    value = BEBufToUint16(p); p += 2;
+                    MODH_UpdateReadback(reg, value);
+                    g_tModH.fAck03H = 1;
+                    break;
+                case REG_P06:
+                    value = BEBufToUint16(p); p += 2;
+                    MODH_UpdateReadback(reg, value);
                     g_tModH.fAck03H = 1;
                     break;
                 case REG_P03:         
@@ -383,17 +414,47 @@ static void MODH_Read_10H(void)
 	}
 }
 
+static void MODH_UpdateReadback(uint16_t reg, uint16_t value)
+{
+    if (SlaveAddr == AO_MODULE_SLAVE_1_ADDR) {
+        if (reg == REG_P01)
+            Var_Write_MaNox(value);
+        else if (reg == REG_P02)
+            Var_Write_MaO2(value);
+        return;
+    }
+
+    if (SlaveAddr != AO_MODULE_SLAVE_2_ADDR)
+        return;
+
+    switch (reg) {
+        case REG_P01: Var_Write_MaSensorNox(0u, value); break;
+        case REG_P02: Var_Write_MaSensorO2(0u, value);  break;
+        case 0x000C:  Var_Write_MaSensorNox(1u, value); break;
+        case 0x000D:  Var_Write_MaSensorO2(1u, value);  break;
+        case 0x000E:  Var_Write_MaSensorNox(2u, value); break;
+        case REG_P06: Var_Write_MaSensorO2(2u, value);  break;
+        default: break;
+    }
+}
+
 
 /*
 *********************************************************************************************************
 *********************************************************************************************************
 */
 uint8_t MODH_ReadParam_03H(uint16_t _reg, uint16_t _num)
+{
+    return MODH_ReadParam_03H_Addr(SlaveAddr, _reg, _num);
+}
+
+static uint8_t MODH_ReadParam_03H_Addr(uint8_t _addr, uint16_t _reg, uint16_t _num)
 {;
 	uint8_t i;
 	
-	for (i = 0; i < RETRY_NUM; i++)
+	for (i = 0; i < MODBUS_HOST_RETRY_NUM; i++)
 	{
+        SlaveAddr = _addr;
 		MODH_Send03H (SlaveAddr, _reg, _num);
 		xTimerStart( MODH_Timer, portMAX_DELAY);
 				
@@ -436,11 +497,17 @@ uint8_t MODH_ReadParam_03H(uint16_t _reg, uint16_t _num)
 */
 uint8_t MODH_WriteParam_06H(uint16_t _reg, uint16_t _value)
 {
+    return MODH_WriteParam_06H_Addr(SlaveAddr, _reg, _value);
+}
+
+static uint8_t MODH_WriteParam_06H_Addr(uint8_t _addr, uint16_t _reg, uint16_t _value)
+{
 
 	uint8_t i;
 	
-	for (i = 0; i < RETRY_NUM; i++)
+	for (i = 0; i < MODBUS_HOST_RETRY_NUM; i++)
 	{	
+        SlaveAddr = _addr;
 		MODH_Send06H (SlaveAddr, _reg, _value);
 		xTimerStart( MODH_Timer, portMAX_DELAY);
 				
@@ -482,11 +549,17 @@ uint8_t MODH_WriteParam_06H(uint16_t _reg, uint16_t _value)
 */
 uint8_t MODH_WriteParam_10H(uint16_t _reg, uint8_t _num, uint8_t *_buf)
 {
+    return MODH_WriteParam_10H_Addr(SlaveAddr, _reg, _num, _buf);
+}
+
+static uint8_t MODH_WriteParam_10H_Addr(uint8_t _addr, uint16_t _reg, uint8_t _num, uint8_t *_buf)
+{
 
 	uint8_t i;
 	
-	for (i = 0; i < RETRY_NUM; i++)
+	for (i = 0; i < MODBUS_HOST_RETRY_NUM; i++)
 	{	
+        SlaveAddr = _addr;
 		MODH_Send10H(SlaveAddr, _reg, _num, _buf);
 		xTimerStart( MODH_Timer, portMAX_DELAY);
 				
@@ -528,6 +601,7 @@ void Time_Out_Fun(TimerHandle_t xTimer) {
 }
 
 uint8_t electricity_data_buf[4]={0};
+uint8_t electricity_data_buf_6ch[12]={0};
 void ModBusHost(void *argument)
 {
 
@@ -541,13 +615,19 @@ void ModBusHost(void *argument)
     
     
     // Software timer for slave reply timeout
-    MODH_Timer = xTimerCreate( "rxtimer", pdMS_TO_TICKS(TIMEOUT_MS), pdFALSE, NULL, Time_Out_Fun);  
+    MODH_Timer = xTimerCreate( "rxtimer", pdMS_TO_TICKS(MODBUS_HOST_REPLY_TIMEOUT_MS), pdFALSE, NULL, Time_Out_Fun);
     
     // UART baud rate init
     MDSUARTxH.Init.BaudRate = HBAUD485;
     HAL_UART_Init(&MDSUARTxH);
     // Start RX interrupt
     Start_Receive_H();
+
+#if AO_MODULE_SLAVE_2_ADDR_CONFIG_ENABLE
+    (void)MODH_WriteParam_06H_Addr(AO_MODULE_SLAVE_2_ADDR_CONFIG_FROM,
+                                   AO_MODULE_ADDR_REG,
+                                   AO_MODULE_SLAVE_2_ADDR_CONFIG_TO);
+#endif
     
     for(;;)
     {
@@ -555,12 +635,32 @@ void ModBusHost(void *argument)
         // Change address / device / parity if needed
         
         // Write register: set output current
-        MODH_WriteParam_10H(REG_P01,2,electricity_data_buf);
-        vTaskDelay(pdMS_TO_TICKS(500));
+        MODH_WriteParam_10H_Addr(AO_MODULE_SLAVE_1_ADDR,
+                                 AO_MODULE_OUTPUT_REG_START,
+                                 AO_MODULE_LEGACY_REG_COUNT,
+                                 electricity_data_buf);
+        vTaskDelay(pdMS_TO_TICKS(AO_MODULE_POLL_GAP_MS));
         
+#if AO_MODULE_READBACK_ENABLE
         // Read back to verify actual current output
-        MODH_ReadParam_03H(REG_P01, 2);
-        vTaskDelay(pdMS_TO_TICKS(500));
+        MODH_ReadParam_03H_Addr(AO_MODULE_SLAVE_1_ADDR,
+                                AO_MODULE_OUTPUT_REG_START,
+                                AO_MODULE_LEGACY_REG_COUNT);
+        vTaskDelay(pdMS_TO_TICKS(AO_MODULE_POLL_GAP_MS));
+#endif
+
+        MODH_WriteParam_10H_Addr(AO_MODULE_SLAVE_2_ADDR,
+                                 AO_MODULE_OUTPUT_REG_START,
+                                 AO_MODULE_6CH_REG_COUNT,
+                                 electricity_data_buf_6ch);
+        vTaskDelay(pdMS_TO_TICKS(AO_MODULE_POLL_GAP_MS));
+
+#if AO_MODULE_READBACK_ENABLE
+        MODH_ReadParam_03H_Addr(AO_MODULE_SLAVE_2_ADDR,
+                                AO_MODULE_OUTPUT_REG_START,
+                                AO_MODULE_6CH_REG_COUNT);
+        vTaskDelay(pdMS_TO_TICKS(AO_MODULE_POLL_GAP_MS));
+#endif
 
     }
 

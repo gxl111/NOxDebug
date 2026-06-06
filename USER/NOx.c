@@ -181,6 +181,15 @@ void NOxReceive(void *argument)
             Var_Update_SensorCore(nox_out, o2_out, state_out);
             NOx_UpdatePerChannelRegs();
             NoxSensor_To4_20mA(nox_out, o2_out, electricity_data_buf);
+            Var_Write_MaNox((uint16_t)(((uint16_t)electricity_data_buf[0] << 8) | electricity_data_buf[1]));
+            Var_Write_MaO2((uint16_t)(((uint16_t)electricity_data_buf[2] << 8) | electricity_data_buf[3]));
+            for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
+                NoxChannel_t *c = &g_noxChannels[ch];
+                uint8_t *p = &electricity_data_buf_6ch[ch * 4u];
+                NoxSensor_To4_20mA(c->nox_ppm, c->o2_pct, p);
+                Var_Write_MaSensorNox(ch, (uint16_t)(((uint16_t)p[0] << 8) | p[1]));
+                Var_Write_MaSensorO2(ch, (uint16_t)(((uint16_t)p[2] << 8) | p[3]));
+            }
         }
 
 #if 0
@@ -256,6 +265,7 @@ void ModBusSlave(void *argument)
 {
     BLOW_CONTROL(0, 0);
     BLOW_CONTROL(1, 0);
+    BLOW_CONTROL(2, 0);
     NoxChannel_Init();
     /* 第二路 CAN（MCP2515）：250 kbps；硬件滤波目标 PGN+F0 SA52 */
 #if NOX_USE_MCP2515
@@ -315,18 +325,16 @@ void Register_Init(void)
         Var_Write_SensorP2O2(ch, c->o2_y[1]);
         Var_Write_SensorP3Nox(ch, c->nox_y[2]);
         Var_Write_SensorP3O2(ch, c->o2_y[2]);
-        uint32_t iv = (ch == 0) ? Blowback_GetInterval() : (ch == 1) ? Blowback_GetIntervalCh1() : Blowback_GetIntervalCh2();
-        uint32_t dv = (ch == 0) ? Blowback_GetDuration() : (ch == 1) ? Blowback_GetDurationCh1() : Blowback_GetDurationCh2();
-        Var_Write_SensorBlowInterval(ch, (uint16_t)iv);
-        Var_Write_SensorBlowDuration(ch, (uint16_t)dv);
+        Var_Write_SensorBlowInterval(ch, (uint16_t)DEFAULT_BLOW_INTERVAL);
+        Var_Write_SensorBlowDuration(ch, (uint16_t)DEFAULT_BLOW_DURATION);
     }
     LOCK_VAR();
     g_tVar.S1.blow_status = 0u;
-    g_tVar.S1.blow_countdown = (uint16_t)(Blowback_GetInterval() > 0u ? Blowback_GetInterval() : 0u);
+    g_tVar.S1.blow_countdown = (uint16_t)DEFAULT_BLOW_INTERVAL;
     g_tVar.S2.blow_status = 0u;
-    g_tVar.S2.blow_countdown = (uint16_t)(Blowback_GetIntervalCh1() > 0u ? Blowback_GetIntervalCh1() : 0u);
+    g_tVar.S2.blow_countdown = (uint16_t)(DEFAULT_BLOW_INTERVAL / BLOW_PHASE_DIVISOR);
     g_tVar.S3.blow_status = 0u;
-    g_tVar.S3.blow_countdown = (uint16_t)(Blowback_GetIntervalCh2() > 0u ? Blowback_GetIntervalCh2() : 0u);
+    g_tVar.S3.blow_countdown = (uint16_t)((2u * DEFAULT_BLOW_INTERVAL) / BLOW_PHASE_DIVISOR);
     g_tVar.S1.power_on = 1u;
     g_tVar.S2.power_on = 1u;
     g_tVar.S3.power_on = 1u;
@@ -356,6 +364,18 @@ void AfterFlash_Init(void)
         NoxChannel_t *c = &g_noxChannels[ch];
         NoxSensor_CalibrationInit(c->nox_x, c->nox_y, &c->nox_low, &c->nox_high);
         NoxSensor_CalibrationInit(c->o2_x,  c->o2_y,  &c->o2_low,  &c->o2_high);
+    }
+
+    {
+        uint16_t shared_interval = Var_Read_SensorBlowInterval(0);
+        if (shared_interval == 0u || shared_interval == 0xFFFFu)
+            shared_interval = (uint16_t)DEFAULT_BLOW_INTERVAL;
+        for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++) {
+            uint16_t duration = Var_Read_SensorBlowDuration(ch);
+            Var_Write_SensorBlowInterval(ch, shared_interval);
+            if (duration == 0u || duration == 0xFFFFu)
+                Var_Write_SensorBlowDuration(ch, (uint16_t)DEFAULT_BLOW_DURATION);
+        }
     }
 
     Blowback_SetConfig((uint32_t)Var_Read_SensorBlowInterval(0), (uint32_t)Var_Read_SensorBlowDuration(0));

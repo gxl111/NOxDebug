@@ -1,7 +1,7 @@
 /**
  * @file    blowback.c
- * @brief   Blowback: two valves (sensor1 P24-P28, sensor2 P29-P33).
- *          D01=normal1, D02=blow1, D03=normal2, D04=blow2. Only one sensor may blow at a time.
+ * @brief   Blowback for S1/S2/S3 (J2/J5/J8 blow valves).
+ *          Only one sensor may blow at a time.
  *          反吹时关抽气（正常）继电器、开反吹继电器；结束按寄存器恢复两路。
  */
 #include "blowback.h"
@@ -15,7 +15,7 @@
 extern uint32_t time_1s;
 extern uint32_t time_1s_blow;
 
-/* Per-channel state (ch0 and ch1). Both use time_1s_blow for periodic schedule. */
+/* Per-channel state. All channels share time_1s_blow and one period. */
 typedef struct {
     TimerHandle_t timer;
     uint8_t blow_flag;
@@ -27,6 +27,62 @@ typedef struct {
 } BlowCh_t;
 
 static BlowCh_t s_ch[NOX_SENSOR_COUNT];
+static uint32_t s_shared_blowspan = DEFAULT_BLOW_INTERVAL;
+
+static void Blowback_NormalizeTiming(BlowCh_t *sc);
+
+static uint32_t Blowback_PhaseSec(uint8_t ch, uint32_t span)
+{
+    if (span == 0u)
+        return 0u;
+    return ((uint32_t)ch * span) / BLOW_PHASE_DIVISOR;
+}
+
+static uint32_t Blowback_FirstFireSec(uint8_t ch, uint32_t span)
+{
+    uint32_t phase = Blowback_PhaseSec(ch, span);
+    return (phase == 0u) ? span : phase;
+}
+
+static void Blowback_WriteSharedIntervalReg(uint16_t interval)
+{
+    LOCK_VAR();
+    g_tVar.S1.blow_interval = interval;
+    g_tVar.S2.blow_interval = interval;
+    g_tVar.S3.blow_interval = interval;
+    UNLOCK_VAR();
+}
+
+static void Blowback_SetSharedInterval(uint32_t interval_s, uint8_t reset_cycle)
+{
+    uint32_t span = (interval_s == 0xFFFFu) ? 0u : interval_s;
+    s_shared_blowspan = span;
+    for (uint8_t ch = 0u; ch < NOX_SENSOR_COUNT; ch++) {
+        s_ch[ch].blowspan = span;
+        Blowback_NormalizeTiming(&s_ch[ch]);
+    }
+    Blowback_WriteSharedIntervalReg((span > 65535u) ? 65535u : (uint16_t)span);
+    if (reset_cycle)
+        time_1s_blow = 0u;
+}
+
+static void Blowback_SyncSharedIntervalFromRegs(void)
+{
+    uint16_t target = (uint16_t)(s_shared_blowspan > 65535u ? 65535u : s_shared_blowspan);
+    uint16_t regs[NOX_SENSOR_COUNT] = {
+        Var_Read_SensorBlowInterval(0),
+        Var_Read_SensorBlowInterval(1),
+        Var_Read_SensorBlowInterval(2)
+    };
+
+    for (uint8_t ch = 0u; ch < NOX_SENSOR_COUNT; ch++) {
+        if (regs[ch] != target) {
+            uint32_t next = (regs[ch] == 0xFFFFu) ? 0u : (uint32_t)regs[ch];
+            Blowback_SetSharedInterval(next, 1u);
+            return;
+        }
+    }
+}
 
 static void Blowback_NormalizeTiming(BlowCh_t *sc)
 {
@@ -83,29 +139,29 @@ void BLOW_CONTROL(uint8_t ch, uint8_t state)
     }
 }
 
-uint32_t Blowback_GetInterval(void) { return s_ch[0].blowspan; }
+uint32_t Blowback_GetInterval(void) { return s_shared_blowspan; }
 uint32_t Blowback_GetDuration(void)  { return s_ch[0].blowtime; }
 void Blowback_SetConfig(uint32_t interval_s, uint32_t duration_s)
 {
-    s_ch[0].blowspan = interval_s ? interval_s : DEFAULT_BLOW_INTERVAL;
+    Blowback_SetSharedInterval(interval_s ? interval_s : DEFAULT_BLOW_INTERVAL, 1u);
     s_ch[0].blowtime = duration_s ? duration_s : DEFAULT_BLOW_DURATION;
     Blowback_NormalizeTiming(&s_ch[0]);
 }
 
-uint32_t Blowback_GetIntervalCh1(void) { return s_ch[1].blowspan; }
+uint32_t Blowback_GetIntervalCh1(void) { return s_shared_blowspan; }
 uint32_t Blowback_GetDurationCh1(void)  { return s_ch[1].blowtime; }
 void Blowback_SetConfigCh1(uint32_t interval_s, uint32_t duration_s)
 {
-    s_ch[1].blowspan = interval_s ? interval_s : DEFAULT_BLOW_INTERVAL;
+    Blowback_SetSharedInterval(interval_s ? interval_s : DEFAULT_BLOW_INTERVAL, 1u);
     s_ch[1].blowtime = duration_s ? duration_s : DEFAULT_BLOW_DURATION;
     Blowback_NormalizeTiming(&s_ch[1]);
 }
 
-uint32_t Blowback_GetIntervalCh2(void) { return s_ch[2].blowspan; }
+uint32_t Blowback_GetIntervalCh2(void) { return s_shared_blowspan; }
 uint32_t Blowback_GetDurationCh2(void)  { return s_ch[2].blowtime; }
 void Blowback_SetConfigCh2(uint32_t interval_s, uint32_t duration_s)
 {
-    s_ch[2].blowspan = interval_s ? interval_s : DEFAULT_BLOW_INTERVAL;
+    Blowback_SetSharedInterval(interval_s ? interval_s : DEFAULT_BLOW_INTERVAL, 1u);
     s_ch[2].blowtime = duration_s ? duration_s : DEFAULT_BLOW_DURATION;
     Blowback_NormalizeTiming(&s_ch[2]);
 }
@@ -116,7 +172,7 @@ void Blowback_Init(void)
         BlowCh_t *sc = &s_ch[ch];
         if (sc->timer == NULL) {
             sc->blowtime = DEFAULT_BLOW_DURATION;
-            sc->blowspan = DEFAULT_BLOW_INTERVAL;
+            sc->blowspan = s_shared_blowspan;
             sc->timer = xTimerCreate("blowtimer", pdMS_TO_TICKS((uint32_t)sc->blowtime * 1000u), pdFALSE, (void *)(uint32_t)ch, Blow_Time_Out_Cb);
             if (sc->timer == NULL)
                 Error_Handler();
@@ -126,7 +182,6 @@ void Blowback_Init(void)
 
 static void Blowback_UpdateOne(uint8_t ch)
 {
-    uint16_t interval = Var_Read_SensorBlowInterval(ch);
     uint16_t duration = Var_Read_SensorBlowDuration(ch);
     uint16_t cmd = Var_Read_SensorBlowCmd(ch);
 
@@ -162,52 +217,31 @@ static void Blowback_UpdateOne(uint8_t ch)
         cmd = 0;
     }
 
-    if (interval == 0xFFFFu || interval == 0u) {
+    if (sc->blowspan == 0u) {
         BLOW_CONTROL(ch, 0);
         xTimerStop(sc->timer, portMAX_DELAY);
         sc->blow_was_stopped = 1;
-        sc->blowspan = 0u;
-    } else {
-        uint32_t new_span = (uint32_t)interval;
-        if (new_span != sc->blowspan) {
-            sc->blowspan = new_span;
-            time_1s_blow = 0;
-            sc->blow_was_stopped = 0;
-        }
-        if (sc->blow_was_stopped) {
-            time_1s_blow = 0;
-            sc->blow_was_stopped = 0;
-        }
+    } else if (sc->blow_was_stopped) {
+        time_1s_blow = 0u;
+        sc->blow_was_stopped = 0u;
     }
 
     sc->blowtime = (uint32_t)duration;
     Blowback_NormalizeTiming(sc);
 
     uint32_t tick = time_1s_blow;
-    if (sc->blowspan != 0u && tick != 0u && !sc->blow_flag) {
-        /* Ch0: fire at 0. Ch1: fire at stagger. Ch2: fire at span*2/3 (no relay, timer/reg only). */
-        uint8_t fire = 0u;
-        if (ch == 0u) {
-            if (tick % sc->blowspan == 0u)
-                fire = 1u;
-        } else if (ch == 1u) {
-            uint32_t phase = BLOW_STAGGER_SEC % sc->blowspan;
-            if (phase == 0u)
-                phase = sc->blowspan / 2u ? sc->blowspan / 2u : 1u;
-            if ((tick % sc->blowspan) == phase)
-                fire = 1u;
-        } else {
-            uint32_t phase = (sc->blowspan * 2u) / 3u;
-            if (phase == 0u) phase = 1u;
-            if ((tick % sc->blowspan) == phase)
-                fire = 1u;
-        }
+    if (sc->blowspan != 0u && !sc->blow_flag) {
+        uint32_t phase = Blowback_PhaseSec(ch, sc->blowspan);
+        uint32_t first_fire = Blowback_FirstFireSec(ch, sc->blowspan);
+        uint8_t fire = ((tick % sc->blowspan) == phase) ? 1u : 0u;
+        if (tick < first_fire)
+            fire = 0u;
         if (fire)
             BLOW_CONTROL(ch, 1);
     }
 
     /*
-     * blow_countdown (40049 / 40087), always in seconds:
+     * blow_countdown (S1 40051 / S2 40093 / S3 40135), always in seconds:
      * - blow_status == 0 (idle): interval countdown = seconds until next periodic blow start.
      * - blow_status == 1 (blowing): duration countdown = seconds remaining until blow ends.
      */
@@ -223,18 +257,12 @@ static void Blowback_UpdateOne(uint8_t ch)
         } else if (sc->blowspan != 0u) {
             /* Idle: show seconds until next scheduled blow (interval phase) */
             uint32_t span = sc->blowspan;
-            uint32_t r = tick % span;
-            if (ch == 0u) {
-                cd = (r == 0u) ? span : (span - r);
-            } else if (ch == 1u) {
-                uint32_t phase = BLOW_STAGGER_SEC % span;
-                if (phase == 0u) phase = span / 2u ? span / 2u : 1u;
-                if (r < phase) cd = phase - r;
-                else if (r > phase) cd = span - r + phase;
-                else cd = span;
+            uint32_t phase = Blowback_PhaseSec(ch, span);
+            uint32_t first_fire = Blowback_FirstFireSec(ch, span);
+            if (tick < first_fire) {
+                cd = first_fire - tick;
             } else {
-                uint32_t phase = (span * 2u) / 3u;
-                if (phase == 0u) phase = 1u;
+                uint32_t r = tick % span;
                 if (r < phase) cd = phase - r;
                 else if (r > phase) cd = span - r + phase;
                 else cd = span;
@@ -257,6 +285,7 @@ static void Blowback_UpdateOne(uint8_t ch)
 
 void Blowback_Update(void)
 {
+    Blowback_SyncSharedIntervalFromRegs();
     Blowback_UpdateOne(0);
     Blowback_UpdateOne(1);
     Blowback_UpdateOne(2);

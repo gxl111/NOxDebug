@@ -34,8 +34,8 @@
 #define DEFAULT_BLOW_INTERVAL   3600u
 /** Minimum blowback duration (s); P25 below this is clamped to avoid timer period 0. */
 #define BLOW_DURATION_MIN_S     1u
-/** Stagger between ch0 and ch1 periodic blowback start (s). Ch1 fires at (n*interval + stagger). */
-#define BLOW_STAGGER_SEC        300u
+/** Three channels share one blowback period and fire at 0, 1/3 and 2/3 period phases. */
+#define BLOW_PHASE_DIVISOR      3u
 
 /** No J1939 NOx frame on this channel for this long => valid=0, state bit9 link-lost (see README 5.4). */
 #define NOX_CAN_SILENCE_TIMEOUT_MS   2000u
@@ -46,6 +46,37 @@
 /* 4 mA = 4000, 20 mA = 20000 in internal units (e.g. 0.1 ?A or DAC step) */
 #define MA4_BASE     4000u
 #define MA20_RANGE   16000u
+
+/* ---------------------------------------------------------------------------*
+ * Modbus defaults and analog-output module configuration
+ * ---------------------------------------------------------------------------*/
+/* Local Modbus slave (USART1 / RS485) */
+#define MODBUS_SLAVE_DEFAULT_ADDR      1u
+#define MODBUS_SLAVE_DEFAULT_BAUD      115200u
+
+/* Modbus host (UART5 / RS485, external 4-20mA modules) */
+#define MODBUS_HOST_DEFAULT_BAUD       9600u
+#define MODBUS_HOST_REPLY_TIMEOUT_MS   1000u
+#define MODBUS_HOST_RETRY_NUM          1u
+#define AO_MODULE_POLL_GAP_MS          125u
+
+/* External analog-output modules. */
+#define AO_MODULE_SLAVE_1_ADDR         0x01u
+#define AO_MODULE_SLAVE_2_ADDR_CONFIG_TO  0x02u
+#define AO_MODULE_SLAVE_2_ADDR         AO_MODULE_SLAVE_2_ADDR_CONFIG_TO
+#define AO_MODULE_OUTPUT_REG_START     0x000Au
+#define AO_MODULE_LEGACY_REG_COUNT     2u
+#define AO_MODULE_6CH_REG_COUNT        6u
+
+/* 1 = write then read back; 0 = write only. Write-only is faster; 10H ACK still confirms register acceptance. */
+#define AO_MODULE_READBACK_ENABLE      0u
+/*
+ * Set to 1 only when configuring the new 6-channel module address.
+ * Connect only the module to be configured, run once, power-cycle the module,
+ * then set this back to 0 for normal operation.
+ */
+#define AO_MODULE_SLAVE_2_ADDR_CONFIG_ENABLE  0u
+#define AO_MODULE_SLAVE_2_ADDR_CONFIG_FROM    0x01u
 
 /* J1939 / CAN */
 #define J1939_HEATER_CAN_ID    0x18FEDF55u

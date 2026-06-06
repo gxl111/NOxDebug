@@ -30,7 +30,7 @@ typedef struct {
     float    o2_y[O2_CAL_NUM];
 } NoxChannel_t;
 
-/* Channel array (index 0 = SA 0x52, index 1 = SA 0x51; extendable to 3) */
+/* Channel array: ch0=CAN1 SA 0x52, ch1=CAN1 SA 0x51, ch2=CAN2 SA 0x52. */
 extern NoxChannel_t g_noxChannels[NOX_SENSOR_COUNT_MAX];
 
 /** Initialize all channels: default params and SA from NOX_SENSOR_SA_LIST. */
@@ -58,19 +58,20 @@ uint8_t NoxChannel_IsValid(uint8_t ch_index);
 /** Set work mode (called from NOx.c after reading P34). */
 void NoxChannel_SetWorkMode(NoxWorkMode_t mode);
 
-/** Set single-channel index (0 or 1). Mode 0 = which channel; mode 1 = 主 channel for primary-backup. */
+/** Set selected channel index. Mode 0 = target channel; mode 1 = primary channel. */
 void NoxChannel_SetSingleChannelIndex(uint8_t ch_index);
 
 /**
  * Compute current output from all channels according to current work mode.
- * Single: ch0 only; Primary_backup: first valid; Fusion: average of valid.
+ * Single: selected target, with fallback on invalid/blowing. Primary_backup: primary then other valid paths.
+ * Fusion: average of valid non-blowing channels when at least two are available.
  * Writes to *nox_ppm, *o2_pct (used as O2 in Modbus P02/sensor blocks), *state for P01/P02/P07 and 4-20mA.
  */
 void NoxChannel_GetCurrentOutput(float *nox_ppm, float *o2_pct, uint16_t *state);
 
 /**
  * Channel currently driving the combined output (updated each strategy cycle).
- * 0 = sensor 1 (SA 0x52), 1 = sensor 2 (SA 0x51), 2 = fusion average applied.
+ * Legacy active channel indicator. Prefer P35/NoxChannel_GetOutputSensorReg() for 3-channel output source.
  */
 uint8_t NoxChannel_GetActiveOutputChannel(void);
 
@@ -80,8 +81,8 @@ uint8_t NoxChannel_GetActiveOutputChannel(void);
 uint8_t NoxChannel_GetWorkModeReadbackHighByte(void);
 
 /**
- * Output sensor register (P35, read-only): 0b01 = sensor0 output, 0b10 = sensor1 output,
- * 0b11 = fusion (both), 0b00 = fault (no valid path).
+ * Output sensor register (P35, read-only): 0b01=S1/ch0, 0b10=S2/ch1,
+ * 0b11=fusion, 0b100=S3/ch2, 0b00=fault.
  */
 uint8_t NoxChannel_GetOutputSensorReg(void);
 

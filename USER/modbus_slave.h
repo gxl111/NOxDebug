@@ -22,7 +22,7 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define LOCK_VAR()    xSemaphoreTakeRecursive(g_hVarMutex, portMAX_DELAY)
 #define UNLOCK_VAR()  xSemaphoreGiveRecursive(g_hVarMutex)
 
-/* Coils: D01 sensor1 normal, D02 sensor1 blowback, D03 sensor2 normal, D04 sensor2 blowback */
+/* Coils D01-D04 are legacy variables only; valve GPIO is controlled by holding registers. */
 #define REG_D01      1
 #define REG_D02      2
 #define REG_D03      3
@@ -40,8 +40,8 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_ALARM_O2_LO     40008   /* Alarm O2 low threshold (float, 2 regs) */
 #define SLAVE_REG_MA_NOX          40010   /* 4-20mA NOx raw (u16) */
 #define SLAVE_REG_MA_O2           40011   /* 4-20mA O2 raw (u16) */
-#define SLAVE_REG_WORK_MODE       40012   /* Work mode only: 0=single 1=primary-backup 2=fusion. Write: low byte mode; single uses high byte 0/256=ch0/ch1. */
-#define SLAVE_REG_OUTPUT_SENSOR   40013   /* P35 R-only: 0b01=S0, 0b10=S1, 0b11=fusion, 0b00=fault */
+#define SLAVE_REG_WORK_MODE       40012   /* Read mode only. Write: low byte mode; high byte selects target/primary ch0/ch1/ch2 for mode 0/1. */
+#define SLAVE_REG_OUTPUT_SENSOR   40013   /* P35 R-only: 0b01=S1/ch0, 0b10=S2/ch1, 0b11=fusion, 0b100=S3/ch2, 0b00=fault */
 #define COMMON_REG_END            40013   /* End address of common block */
 
 /* ==================== Per-sensor registers (same layout each, 39 + 3 valve regs = 42 per channel) ==================== */
@@ -141,10 +141,18 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_S3_VALVE_BLOW   40138   /* J8_IN(PB5) */
 #define SLAVE_REG_S3_VALVE_CAL    40139   /* J9_IN(PB8) */
 
-/* 保持寄存器映射 40001..40139 共 139 字；Modbus 03H 单次最多读 MODBUS_FC03_MAX_REGS（125）——主站须分两次轮询，例如 40001×125 + 40126×14。 */
+/* 6-channel 4-20mA module readback/source mirror: S1 NOx/O2, S2 NOx/O2, S3 NOx/O2 */
+#define SLAVE_REG_MA_S1_NOX       40140
+#define SLAVE_REG_MA_S1_O2        40141
+#define SLAVE_REG_MA_S2_NOX       40142
+#define SLAVE_REG_MA_S2_O2        40143
+#define SLAVE_REG_MA_S3_NOX       40144
+#define SLAVE_REG_MA_S3_O2        40145
+
+/* 保持寄存器映射 40001..40145 共 145 字；Modbus 03H 单次最多读 MODBUS_FC03_MAX_REGS（125）——主站须分两次轮询，例如 40001×125 + 40126×20。 */
 #define MODBUS_FC03_MAX_REGS           125u
-#define SLAVE_HOLDING_REG_LAST         SLAVE_REG_S3_VALVE_CAL
-#define SLAVE_HOLDING_REG_TOTAL        139u
+#define SLAVE_HOLDING_REG_LAST         SLAVE_REG_MA_S3_O2
+#define SLAVE_HOLDING_REG_TOTAL        145u
 
 #define RSP_OK              0
 #define RSP_ERR_CMD         0x01
@@ -189,6 +197,7 @@ typedef struct {
     uint16_t output_ch_status;
     float    alarm_nox_hi, alarm_o2_lo;
     uint16_t ma_nox, ma_o2, work_mode;
+    uint16_t ma_s1_nox, ma_s1_o2, ma_s2_nox, ma_s2_o2, ma_s3_nox, ma_s3_o2;
     uint16_t coil_d01, coil_d02, coil_d03, coil_d04;
 
     SensorRegs_t S1, S2, S3;
@@ -237,11 +246,15 @@ extern void Var_Write_MaNox(uint16_t value);
 extern uint16_t Var_Read_MaNox(void);
 extern void Var_Write_MaO2(uint16_t value);
 extern uint16_t Var_Read_MaO2(void);
+extern void Var_Write_MaSensorNox(uint8_t ch, uint16_t value);
+extern uint16_t Var_Read_MaSensorNox(uint8_t ch);
+extern void Var_Write_MaSensorO2(uint8_t ch, uint16_t value);
+extern uint16_t Var_Read_MaSensorO2(uint8_t ch);
 extern void Var_Write_WorkMode(uint16_t value);
 extern uint16_t Var_Read_WorkMode(void);
 /** P34: mode0 写 0/256=ch0/ch1; mode1 写 1/257=ch0/ch1 主. Read returns channel index 0/1. */
 extern uint8_t Var_Read_SingleChannelIndex(void);
-/** P35 output sensor (40013, R-only): 0b01=S0 0b10=S1 0b11=fusion 0b00=fault. */
+/** P35 output sensor (40013, R-only): 0b01=S1/ch0 0b10=S2/ch1 0b11=fusion 0b100=S3/ch2 0b00=fault. */
 extern uint8_t Var_Read_OutputSensorReg(void);
 
 /* Per-channel sensor accessors; ch=0 or 1, same layout as common block */

@@ -49,3 +49,4 @@ nox_rct6\modbus.o: ../Core/Inc/gpio.h
 nox_rct6\modbus.o: ..\USER\modbus_flash.h
 nox_rct6\modbus.o: ..\USER\modbus_host.h
 nox_rct6\modbus.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/timers.h
+nox_rct6\modbus.o: ..\USER\app_config.h

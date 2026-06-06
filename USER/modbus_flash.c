@@ -2,7 +2,7 @@
  * modbus_flash.c - Save/load sensor calibration (S1/S2/S3) + blowback interval/duration per channel.
  * Layout v2: 36 floats + magic BLW3 + 6 uint32 (S1/S2/S3 blow int/dur).
  * Older format: 24 floats + magic BLWF + 4 uint32 (S1/S2 blow only) — still loaded if word[36] != V2 magic.
- * Blow stagger remains in blowback.c (BLOW_STAGGER_SEC), not in Flash.
+ * Blowback phase split remains in blowback.c/app_config.h (BLOW_PHASE_DIVISOR), not in Flash.
  */
 #include "modbus_flash.h"
 #include "modbus_slave.h"

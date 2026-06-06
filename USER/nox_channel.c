@@ -1,7 +1,7 @@
 /**
  * @file    nox_channel.c
  * @brief   Per-sensor channel: init, update from CAN, validity.
- *          Params per channel for future 3-way; currently 2 channels (SA 0x52, 0x51).
+ *          Params per channel for S1/S2/S3 (CAN1 SA 0x52/0x51, CAN2 SA 0x52).
  *          Runtime strategy: blowback overrides; fusion only when both valid and not blowing;
  *          otherwise degrades to primary-backup; both invalid => fault readback (high 0xFF).
  *          某路反吹时：该路 raw/ppm/state/valid 冻结为反吹前最后值，直至反吹结束（仍刷新 last_rx_ms，且不做静默超时改写）。
@@ -40,7 +40,7 @@ uint8_t NoxChannel_GetWorkModeReadbackHighByte(void)
     return s_readback_high_byte;
 }
 
-/* P35 output sensor: 0b01=S0, 0b10=S1, 0b11=fusion, 0b100=S2(第二路CAN), 0b00=fault */
+/* P35 output sensor: 0b01=S1/ch0, 0b10=S2/ch1, 0b11=fusion, 0b100=S3/ch2(CAN2), 0b00=fault */
 #define OUT_REG_S0      0x01u
 #define OUT_REG_S1      0x02u
 #define OUT_REG_FUSION  0x03u
