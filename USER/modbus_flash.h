@@ -8,9 +8,9 @@
 #define __MODBUS_FLASH_H
 #include <stdint.h>
 
-/* Internal Flash sector for parameter backup (STM32F103 2KB page) */
-#define FLASH_USER_START_ADDR   0x08010000
-#define FLASH_USER_END_ADDR     0x08010800
+/* Internal Flash sector for parameter backup: last 2KB page of STM32F103RC 256KB Flash. */
+#define FLASH_USER_START_ADDR   0x0803F800
+#define FLASH_USER_END_ADDR     0x08040000
 
 /** Write g_tVar params (P03-P21, P41-P52) to Flash. Returns 1 on success, -1 on error. */
 int InternalFlash_Write(void);
