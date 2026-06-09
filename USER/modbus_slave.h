@@ -77,7 +77,7 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define SLAVE_REG_S1_BLOW_CD     40051
 #define SLAVE_REG_S1_BLOW_CMD    40052
 #define SLAVE_REG_S1_VALVE_NORMAL 40053   /* R/W: 0=关 1=开, J1_IN(PA4) 正常抽气检测 */
-#define SLAVE_REG_S1_VALVE_BLOW   40054   /* R/W: 0=关 1=开, J2_IN(PA3) 反吹；反吹任务会覆盖 */
+#define SLAVE_REG_S1_VALVE_BLOW   40054   /* R/W: 0=关 1=开, J2_IN(PA3) 反吹；打开时关闭同路正常抽气 */
 #define SLAVE_REG_S1_VALVE_CAL    40055   /* R/W: 0=关 1=开, J3_IN(PA1) 校准 */
 
 /* Sensor channel 2 (40056-40097), same layout + 3 valve (J4,J5,J6) */
@@ -313,7 +313,7 @@ extern void Var_Write_SensorBlowInterval(uint8_t ch, uint16_t v);
 extern void Var_Write_SensorBlowDuration(uint8_t ch, uint16_t v);
 extern void Var_Write_SensorBlowCmd(uint8_t ch, uint16_t v);
 
-/* 阀门保持寄存器：v=0 正常抽气 1 反吹 2 校准；写时驱动 J1-J9，反吹任务会覆盖 valve_blow/强关抽气 */
+/* 阀门保持寄存器：v=0 正常抽气 1 反吹 2 校准；写时驱动 J1-J9，并执行同路互锁 */
 extern uint16_t Var_Read_SensorValve(uint8_t ch, uint8_t v);
 extern void Var_Write_SensorValve(uint8_t ch, uint8_t v, uint16_t value);
 /** 反吹结束后由 blowback 调用，将 valve_blow 寄存器写回对应 GPIO */
@@ -322,9 +322,11 @@ extern void Modbus_ApplySensorValveBlowToGPIO(uint8_t ch);
 extern void Modbus_ApplySensorValveNormalToGPIO(uint8_t ch);
 /** 反吹开始时仅拉低抽气 GPIO，不改变 g_tVar.valve_normal */
 extern void Modbus_ForceSensorNormalValveOff(uint8_t ch);
+/** 清除手动抽气覆盖；反吹/校准等安全联锁介入时调用 */
+extern void Modbus_ClearManualSuctionOverride(uint8_t ch);
 /**
- * 每路传感器：状态字 bit9(0x0200) 未置位（通信未判链路丢失）、且非反吹、且校准阀关 → 抽气(正常)继电器置 1；否则置 0。
- * 会更新 valve_normal 寄存器并驱动 GPIO（与反吹中抽气写保护一致）。
+ * 未手动覆盖时，状态字 0x1FF、且非反吹、且校准阀关 -> 抽气继电器置 1；否则置 0。
+ * 同路非反吹、非校准时，手动写正常抽气阀为 1 可绕过 0x1FF 条件；反吹/校准仍会强制关闭并清除覆盖。
  */
 extern void Modbus_AutoSuctionValvesUpdate(void);
 

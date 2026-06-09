@@ -19,6 +19,10 @@
 #define REG_PXX 	REG_P05
 #define AO_MODULE_ADDR_REG  REG_P03
 
+#define AO_ADDR_CONFIG_STATUS_IDLE     0u
+#define AO_ADDR_CONFIG_STATUS_SUCCESS  1u
+#define AO_ADDR_CONFIG_STATUS_FAILED   2u
+
 typedef struct
 {
 	uint8_t RxBuf[H_RX_BUF_SIZE];
@@ -55,6 +59,7 @@ typedef struct
 }VAR_T_H;
 
 extern VAR_T_H g_tVar_h;
+extern volatile uint8_t g_ao_addr_config_status;
 /* 4-20 mA module register values (NOx/O2 codes), filled by NOx task */
 extern uint8_t electricity_data_buf[4];
 /* 6-channel 4-20 mA module values: S1 NOx/O2, S2 NOx/O2, S3 NOx/O2. */

@@ -1,0 +1,45 @@
+                 滤芯反吹气
+                                                      主机箱
+
+
+
+           NOx原位传感器
+                              保温层
+
+
+
+                     检测气室    滤芯                                 烟气
+
+电磁阀
+
+                测温                  加热元件
+
+
+
+                     射流泵          方向控制阀
+          单向阀                                                                       原位直测式
+                                                                                    NOX/O2氮氧化物检测仪
+                                     电磁阀
+电磁换向阀
+                     加热控制盒                        NOx变送器
+                                            加热
+                                           电位器
+
+
+
+
+压缩空气源入口     废气排放口                 标气校准入口
+
+
+
+                                                 设计/DESIGNER
+                                                 制图/DRAWER
+                                                                                      项目                    烟气治理项目
+                                                 校对/VERIFIER                        PROJECT
+                                                 审批/CONFIRM                          NOx/O2检测仪        比例/SCALE
+                                                                                                      页数/PAGES
+                                                                                     主机箱原理图           数量/NUMBER
+                                                         Zhongtian Weldking Green    图号/DRAWING NO.   材料/MATERIAL
+                                                         Technology Co.,Ltd
+                                                                                                      日期/DATE
+

@@ -20,10 +20,14 @@ MODH_T g_tModH = {0};
 uint8_t g_modh_timeout = 0;
 VAR_T_H g_tVar_h = {0};
 volatile int32_t time1 = 0;
+volatile uint8_t g_ao_addr_config_status = AO_ADDR_CONFIG_STATUS_IDLE;
 
 QueueHandle_t RS485send_SemaphoreHandle;
 QueueHandle_t MODHx_SemaphoreHandle;
 TimerHandle_t MODH_Timer;
+
+static uint16_t s_write06_reg = 0u;
+static uint16_t s_write06_value = 0u;
 
 /* ----- Forward declarations ----- */
 
@@ -105,6 +109,10 @@ void MODH_Send03H(uint8_t _addr, uint16_t _reg, uint16_t _num)
  */
 void MODH_Send06H(uint8_t _addr, uint16_t _reg, uint16_t _value)
 {
+    g_tModH.fAck06H = 0;		/* clear until response matches */
+    s_write06_reg = _reg;
+    s_write06_value = _value;
+
 	g_tModH.TxCount = 0;
 	g_tModH.TxBuf[g_tModH.TxCount++] = _addr;
 	g_tModH.TxBuf[g_tModH.TxCount++] = 0x06;
@@ -114,7 +122,6 @@ void MODH_Send06H(uint8_t _addr, uint16_t _reg, uint16_t _value)
 	g_tModH.TxBuf[g_tModH.TxCount++] = _value;
 
 	MODH_SendWithCRC();
-	g_tModH.fAck06H = 0;		/* clear until response matches */
 }
 /*
  * MODH_Send10H — build and send 10H (write multiple registers).
@@ -388,13 +395,18 @@ static void MODH_Read_06H(void)
 {
 	if (g_tModH.RxCount > 0)
 	{
-		if (g_tModH.RxBuf[0] == SlaveAddr)
-		{
-			g_tModH.fAck06H = 1;		
-			
-			
-			
-		}
+        if (g_tModH.RxCount != 8u)
+            return;
+		if (g_tModH.RxBuf[0] != SlaveAddr)
+            return;
+        if (g_tModH.RxBuf[1] != 0x06u)
+            return;
+        if (BEBufToUint16(&g_tModH.RxBuf[2]) != s_write06_reg)
+            return;
+        if (BEBufToUint16(&g_tModH.RxBuf[4]) != s_write06_value)
+            return;
+
+        g_tModH.fAck06H = 1;
 	}
 }
 
@@ -624,10 +636,16 @@ void ModBusHost(void *argument)
     Start_Receive_H();
 
 #if AO_MODULE_SLAVE_2_ADDR_CONFIG_ENABLE
-    (void)MODH_WriteParam_06H_Addr(AO_MODULE_SLAVE_2_ADDR_CONFIG_FROM,
-                                   AO_MODULE_ADDR_REG,
-                                   AO_MODULE_SLAVE_2_ADDR_CONFIG_TO);
-#endif
+    g_ao_addr_config_status = MODH_WriteParam_06H_Addr(AO_MODULE_SLAVE_2_ADDR_CONFIG_FROM,
+                                                       AO_MODULE_ADDR_REG,
+                                                       AO_MODULE_SLAVE_2_ADDR_CONFIG_TO)
+                              ? AO_ADDR_CONFIG_STATUS_SUCCESS
+                              : AO_ADDR_CONFIG_STATUS_FAILED;
+
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+#else
     
     for(;;)
     {
@@ -663,5 +681,6 @@ void ModBusHost(void *argument)
 #endif
 
     }
+#endif
 
 }

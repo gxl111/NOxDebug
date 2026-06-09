@@ -112,7 +112,7 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 /* MCP2515 SPI-CAN: 引脚见上方 CubeMX 生成项 MCP2515_CS_Pin / MCP2515_INT_Pin；SPI2: PB13 SCK, PB14 MISO, PB15 MOSI */
-/* Sensor power control GPIO (SENSOR_POWER_GPIO_ENABLE=1 in app_config.h): S1=PC0, S2=PC13, S3=PB9 */
+/* Sensor enable relays (SENSOR_POWER_GPIO_ENABLE=1): S1=JC1/PC0, S2=JC2/PC13, S3=JC3/PB9 */
 #define SENSOR_POWER0_Pin       GPIO_PIN_0
 #define SENSOR_POWER0_GPIO_Port GPIOC
 #define SENSOR_POWER1_Pin       GPIO_PIN_13

@@ -296,7 +296,7 @@ void ModBusSlave(void *argument)
     AfterFlash_Init();
     Calibration_Init();
 #if SENSOR_POWER_GPIO_ENABLE
-    /* 将 power_on 寄存器同步到 GPIO（PC0/PC13/PB9），上电后输出与寄存器一致 */
+    /* 将 power_on 寄存器同步到 JC1/JC2/JC3，上电后输出与寄存器一致 */
     for (uint8_t ch = 0; ch < NOX_SENSOR_COUNT; ch++)
         Var_Write_SensorPowerOn(ch, Var_Read_SensorPowerOn(ch));
 #endif

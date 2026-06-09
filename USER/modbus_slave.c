@@ -70,6 +70,38 @@ VAR_T g_tVar = { .S1 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu },
                  .S2 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu },
                  .S3 = { .nox_cal_trig = 0xFFFFu, .o2_cal_trig = 0xFFFFu } };
 
+/* Manual suction override: set only by direct Modbus writes to normal suction valves. */
+static uint8_t s_manual_suction_override[NOX_SENSOR_COUNT_MAX] = {0u};
+
+static void Modbus_SetManualSuctionOverride(uint8_t ch, uint8_t enable)
+{
+    if (ch < NOX_SENSOR_COUNT)
+        s_manual_suction_override[ch] = enable ? 1u : 0u;
+}
+
+void Modbus_ClearManualSuctionOverride(uint8_t ch)
+{
+    Modbus_SetManualSuctionOverride(ch, 0u);
+}
+
+static uint8_t Modbus_IsManualSuctionOverride(uint8_t ch)
+{
+    if (ch >= NOX_SENSOR_COUNT)
+        return 0u;
+    return s_manual_suction_override[ch];
+}
+
+static void Modbus_ManualWriteSensorNormalValve(uint8_t ch, uint16_t value)
+{
+    uint8_t on = (value != 0u) ? 1u : 0u;
+
+    Var_Write_SensorValve(ch, 0u, on);
+    if (on && Var_Read_SensorValve(ch, 0u) != 0u && Var_Read_SensorValve(ch, 2u) == 0u && !Blowback_IsChannelBlowing(ch))
+        Modbus_SetManualSuctionOverride(ch, 1u);
+    else
+        Modbus_SetManualSuctionOverride(ch, 0u);
+}
+
 /* Mutex-protected read/write macros for single g_tVar fields; avoid repeating LOCK_VAR/UNLOCK_VAR. */
 #define VAR_READ_U16(member, ret)   do { LOCK_VAR(); (ret) = g_tVar.member; UNLOCK_VAR(); } while(0)
 #define VAR_READ_FLOAT(member, ret) do { LOCK_VAR(); (ret) = g_tVar.member; UNLOCK_VAR(); } while(0)
@@ -1033,7 +1065,7 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
         case 40048: s->blow_interval = value; UNLOCK_VAR(); return 1;
         case 40049: s->blow_duration = value; UNLOCK_VAR(); return 1;
         case 40052: s->blow_cmd = value; UNLOCK_VAR(); return 1;
-        case 40053: s->valve_normal = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(0, 0, s->valve_normal); return 1;
+        case 40053: s->valve_normal = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Modbus_ManualWriteSensorNormalValve(0, value); return 1;
         case 40054: s->valve_blow   = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(0, 1, s->valve_blow);   return 1;
         case 40055: s->valve_cal    = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(0, 2, s->valve_cal);    return 1;
         /* S2 block 40056-40097 */
@@ -1064,7 +1096,7 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
         case 40090: s->blow_interval = value; UNLOCK_VAR(); return 1;
         case 40091: s->blow_duration = value; UNLOCK_VAR(); return 1;
         case 40094: s->blow_cmd = value; UNLOCK_VAR(); return 1;
-        case 40095: s->valve_normal = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(1, 0, s->valve_normal); return 1;
+        case 40095: s->valve_normal = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Modbus_ManualWriteSensorNormalValve(1, value); return 1;
         case 40096: s->valve_blow   = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(1, 1, s->valve_blow);   return 1;
         case 40097: s->valve_cal    = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(1, 2, s->valve_cal);    return 1;
         /* S3 block 40098-40139 */
@@ -1095,7 +1127,7 @@ static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
         case 40132: s->blow_interval = value; UNLOCK_VAR(); return 1;
         case 40133: s->blow_duration = value; UNLOCK_VAR(); return 1;
         case 40136: s->blow_cmd = value; UNLOCK_VAR(); return 1;
-        case 40137: s->valve_normal = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(2, 0, s->valve_normal); return 1;
+        case 40137: s->valve_normal = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Modbus_ManualWriteSensorNormalValve(2, value); return 1;
         case 40138: s->valve_blow   = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(2, 1, s->valve_blow);   return 1;
         case 40139: s->valve_cal    = (value != 0u) ? 1u : 0u; UNLOCK_VAR(); Var_Write_SensorValve(2, 2, s->valve_cal);    return 1;
         default: UNLOCK_VAR(); return 0;
@@ -1273,33 +1305,56 @@ static void Valve_WriteGPIO(uint8_t ch, uint8_t v, uint8_t on) {
 void Var_Write_SensorValve(uint8_t ch, uint8_t v, uint16_t value) {
     if (ch > 2u || v > 2u) return;
     uint8_t on = (value != 0u) ? 1u : 0u;
+    uint8_t normal = 0u, blow = 0u, cal = 0u;
+
     LOCK_VAR();
-    if (v == 0u) S(ch)->valve_normal = (uint16_t)on;
-    else if (v == 1u) S(ch)->valve_blow = (uint16_t)on;
-    else S(ch)->valve_cal = (uint16_t)on;
+    normal = (S(ch)->valve_normal != 0u) ? 1u : 0u;
+    blow = (S(ch)->valve_blow != 0u) ? 1u : 0u;
+    cal = (S(ch)->valve_cal != 0u) ? 1u : 0u;
+
+    if (v == 0u) {
+        normal = on;
+        if (normal) blow = 0u;
+    } else if (v == 1u) {
+        blow = on;
+        if (blow) normal = 0u;
+    } else {
+        cal = on;
+        if (cal) {
+            normal = 0u;
+            blow = 0u;
+        }
+    }
+    if (cal && v != 2u) {
+        normal = 0u;
+        blow = 0u;
+    }
+
+    S(ch)->valve_normal = (uint16_t)normal;
+    S(ch)->valve_blow = (uint16_t)blow;
+    S(ch)->valve_cal = (uint16_t)cal;
     UNLOCK_VAR();
-    /* 反吹中抽气 GPIO 由 BLOW_CONTROL 保持关，只记寄存器，结束后再 Apply */
-    if (v == 0u && Blowback_IsChannelBlowing(ch))
-        return;
-    Valve_WriteGPIO(ch, v, on);
+
+    if (Blowback_IsChannelBlowing(ch))
+        normal = 0u;
+
+    if ((v == 1u && blow) || (v == 2u && cal))
+        Modbus_ClearManualSuctionOverride(ch);
+
+    if (v == 1u)
+        Blowback_OnBlowValveChanged(ch, blow);
+
+    Valve_WriteGPIO(ch, 0u, normal);
+    Valve_WriteGPIO(ch, 1u, blow);
+    Valve_WriteGPIO(ch, 2u, cal);
 }
 
 void Modbus_ApplySensorValveBlowToGPIO(uint8_t ch) {
-    if (ch > 2u) return;
-    uint16_t v;
-    LOCK_VAR();
-    v = (ch == 0u) ? g_tVar.S1.valve_blow : ((ch == 1u) ? g_tVar.S2.valve_blow : g_tVar.S3.valve_blow);
-    UNLOCK_VAR();
-    Valve_WriteGPIO(ch, 1, (v != 0u) ? 1u : 0u);
+    Var_Write_SensorValve(ch, 1u, Var_Read_SensorValve(ch, 1u));
 }
 
 void Modbus_ApplySensorValveNormalToGPIO(uint8_t ch) {
-    if (ch > 2u) return;
-    uint16_t v;
-    LOCK_VAR();
-    v = (ch == 0u) ? g_tVar.S1.valve_normal : ((ch == 1u) ? g_tVar.S2.valve_normal : g_tVar.S3.valve_normal);
-    UNLOCK_VAR();
-    Valve_WriteGPIO(ch, 0, (v != 0u) ? 1u : 0u);
+    Var_Write_SensorValve(ch, 0u, Var_Read_SensorValve(ch, 0u));
 }
 
 void Modbus_ForceSensorNormalValveOff(uint8_t ch) {
@@ -1307,8 +1362,8 @@ void Modbus_ForceSensorNormalValveOff(uint8_t ch) {
     Valve_WriteGPIO(ch, 0u, 0u);
 }
 
-/* 与 nox_channel.c 中 NOX_STATE_BIT_LINK_LOST 一致 */
-#define SENSOR_STATUS_LINK_LOST_MASK  (0x0200u)
+/* 抽气阀只在传感器完整正常时自动打开：J1939 状态/FMI 正常，且未通信超时。 */
+#define SENSOR_STATUS_OK  (0x01FFu)
 
 void Modbus_AutoSuctionValvesUpdate(void)
 {
@@ -1319,19 +1374,32 @@ void Modbus_AutoSuctionValvesUpdate(void)
     for (uint8_t ch = 0u; ch < NOX_SENSOR_COUNT; ch++) {
         uint32_t now = HAL_GetTick();
         uint16_t st = Var_Read_SensorStatus(ch);
-        uint8_t link_ok = ((st & SENSOR_STATUS_LINK_LOST_MASK) == 0u);
+        uint8_t sensor_ok = (st == SENSOR_STATUS_OK) ? 1u : 0u;
         uint8_t current = (Var_Read_SensorValve(ch, 0u) != 0u) ? 1u : 0u;
         uint8_t not_cal = (Var_Read_SensorValve(ch, 2u) == 0u);
         uint8_t not_blow = (uint8_t)(!Blowback_IsChannelBlowing(ch));
-        uint8_t desired = (link_ok && not_cal && not_blow) ? 1u : 0u;
+        uint8_t manual = Modbus_IsManualSuctionOverride(ch);
+        uint8_t desired = ((manual || sensor_ok) && not_cal && not_blow) ? 1u : 0u;
         uint8_t force_off = (uint8_t)(!not_cal || !not_blow);
 
         s_applied[ch] = current;
         if (force_off) {
+            Modbus_SetManualSuctionOverride(ch, 0u);
             if (current != 0u)
                 Var_Write_SensorValve(ch, 0u, 0u);
             s_applied[ch] = 0u;
             s_pending[ch] = 0u;
+            s_pending_since[ch] = now;
+            continue;
+        }
+
+        if (manual) {
+            if (current == 0u)
+                Var_Write_SensorValve(ch, 0u, 1u);
+            else
+                Modbus_ApplySensorValveNormalToGPIO(ch);
+            s_applied[ch] = 1u;
+            s_pending[ch] = 1u;
             s_pending_since[ch] = now;
             continue;
         }

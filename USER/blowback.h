@@ -15,6 +15,16 @@ void BLOW_CONTROL(uint8_t ch, uint8_t state);
 /** 1 if channel is currently in blowback (use other channel for output when dual-sensor). */
 uint8_t Blowback_IsChannelBlowing(uint8_t ch);
 
+/**
+ * 1 while channel data must be held: blow valve is active or the post-blowback
+ * suction recovery delay has not elapsed yet. Output selection should skip it,
+ * but suction-valve interlock should still use Blowback_IsChannelBlowing().
+ */
+uint8_t Blowback_IsChannelDataHold(uint8_t ch);
+
+/* Notify blow valve transitions from direct Modbus valve writes. */
+void Blowback_OnBlowValveChanged(uint8_t ch, uint8_t on);
+
 /* Run each cycle from NOxDefault: update each channel's blowback command, timer and valves. */
 void Blowback_Update(void);
 

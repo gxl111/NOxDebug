@@ -32,6 +32,12 @@
 /* Blowback defaults: duration (s), interval (s). Interval must be > duration. */
 #define DEFAULT_BLOW_DURATION   60u
 #define DEFAULT_BLOW_INTERVAL   3600u
+/*
+ * After blowback ends, keep this channel out of output selection for a short
+ * suction recovery window. This lets the normal sampling valve reopen and the
+ * gas path settle before fresh CAN values replace the pre-blowback hold data.
+ */
+#define BLOW_RECOVERY_DELAY_S   10u
 /** Minimum blowback duration (s); P25 below this is clamped to avoid timer period 0. */
 #define BLOW_DURATION_MIN_S     1u
 /** Three channels share one blowback period and fire at 0, 1/3 and 2/3 period phases. */
@@ -78,6 +84,13 @@
 #define AO_MODULE_SLAVE_2_ADDR_CONFIG_ENABLE  0u
 #define AO_MODULE_SLAVE_2_ADDR_CONFIG_FROM    0x01u
 
+#if (AO_MODULE_SLAVE_2_ADDR_CONFIG_FROM < 1u) || (AO_MODULE_SLAVE_2_ADDR_CONFIG_FROM > 255u)
+#error "AO_MODULE_SLAVE_2_ADDR_CONFIG_FROM must be in 1..255"
+#endif
+#if (AO_MODULE_SLAVE_2_ADDR_CONFIG_TO < 1u) || (AO_MODULE_SLAVE_2_ADDR_CONFIG_TO > 255u)
+#error "AO_MODULE_SLAVE_2_ADDR_CONFIG_TO must be in 1..255"
+#endif
+
 /* J1939 / CAN */
 #define J1939_HEATER_CAN_ID    0x18FEDF55u
 #define J1939_HEATER_PAYLOAD_TAIL  0x55u
@@ -118,10 +131,10 @@ typedef enum {
 
 /*
  * Sensor power control: 0 = do not drive GPIO (power_on register still R/W in Modbus).
- * 1 = drive reserved GPIO from each sensor's power_on register (see main.h SENSOR_POWERx).
- * GPIO pins reserved in main.h; change when hardware is defined.
+ * 1 = drive JC1/JC2/JC3 from each sensor's power_on register:
+ *     S1 -> JC1/SENSOR_POWER0, S2 -> JC2/SENSOR_POWER1, S3 -> JC3/SENSOR_POWER2.
  */
-#define SENSOR_POWER_GPIO_ENABLE   0
+#define SENSOR_POWER_GPIO_ENABLE   1
 
 /*
  * Relay hardware test mode:

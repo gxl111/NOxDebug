@@ -21,6 +21,8 @@ typedef struct {
     uint8_t blow_flag;
     volatile uint8_t blow_end_pending;
     uint8_t blow_was_stopped;
+    uint8_t blow_active_latched;
+    uint32_t data_hold_until_ms;
     uint32_t blow_start_time_1s;
     uint32_t blowtime;
     uint32_t blowspan;
@@ -95,7 +97,47 @@ static void Blowback_NormalizeTiming(BlowCh_t *sc)
 uint8_t Blowback_IsChannelBlowing(uint8_t ch)
 {
     if (ch >= NOX_SENSOR_COUNT) return 0u;
-    return s_ch[ch].blow_flag ? 1u : 0u;
+    if (s_ch[ch].blow_flag)
+        return 1u;
+    return (Var_Read_SensorValve(ch, 1u) != 0u) ? 1u : 0u;
+}
+
+static uint32_t Blowback_RecoveryDelayMs(void)
+{
+    return (uint32_t)BLOW_RECOVERY_DELAY_S * 1000u;
+}
+
+void Blowback_OnBlowValveChanged(uint8_t ch, uint8_t on)
+{
+    if (ch >= NOX_SENSOR_COUNT) return;
+    BlowCh_t *sc = &s_ch[ch];
+
+    if (on) {
+        sc->blow_active_latched = 1u;
+        sc->data_hold_until_ms = 0u;
+        return;
+    }
+
+    if (sc->blow_active_latched) {
+        sc->blow_active_latched = 0u;
+        sc->data_hold_until_ms = HAL_GetTick() + Blowback_RecoveryDelayMs();
+    }
+}
+
+uint8_t Blowback_IsChannelDataHold(uint8_t ch)
+{
+    if (ch >= NOX_SENSOR_COUNT) return 0u;
+    if (Blowback_IsChannelBlowing(ch))
+        return 1u;
+
+    uint32_t until = s_ch[ch].data_hold_until_ms;
+    if (until == 0u)
+        return 0u;
+    if ((int32_t)(HAL_GetTick() - until) < 0)
+        return 1u;
+
+    s_ch[ch].data_hold_until_ms = 0u;
+    return 0u;
 }
 
 static void Blow_Time_Out_Cb(TimerHandle_t xTimer)
@@ -112,7 +154,7 @@ void BLOW_CONTROL(uint8_t ch, uint8_t state)
     /* Only one sensor may blow at a time (even in fusion mode). */
     if (state) {
         for (uint8_t k = 0; k < NOX_SENSOR_COUNT; k++) {
-            if (k != ch && s_ch[k].blow_flag)
+            if (k != ch && Blowback_IsChannelBlowing(k))
                 return;  /* Another channel is blowing, skip starting this one */
         }
         sc->blow_flag = 1;
@@ -122,19 +164,12 @@ void BLOW_CONTROL(uint8_t ch, uint8_t state)
     } else {
         sc->blow_flag = 0;
     }
-    /* 反吹 ON：先关抽气 J1/J4/J7，再开反吹 J2/J5/J8（与抽气互斥）。反吹 OFF：两路按寄存器恢复。 */
+    /* Keep valve registers and GPIO in sync so Modbus/UI state matches relay output. */
     if (state) {
-        Modbus_ForceSensorNormalValveOff(ch);
-    }
-    if (ch == 0) {
-        HAL_GPIO_WritePin(J2_IN_GPIO_Port, J2_IN_Pin, state ? GPIO_PIN_SET : GPIO_PIN_RESET);   /* S1 反吹 */
-    } else if (ch == 1) {
-        HAL_GPIO_WritePin(J5_IN_GPIO_Port, J5_IN_Pin, state ? GPIO_PIN_SET : GPIO_PIN_RESET);   /* S2 反吹 */
+        Modbus_ClearManualSuctionOverride(ch);
+        Var_Write_SensorValve(ch, 1u, 1u);
     } else {
-        HAL_GPIO_WritePin(J8_IN_GPIO_Port, J8_IN_Pin, state ? GPIO_PIN_SET : GPIO_PIN_RESET);   /* S3 反吹 */
-    }
-    if (!state) {
-        Modbus_ApplySensorValveBlowToGPIO(ch);
+        Var_Write_SensorValve(ch, 1u, 0u);
         Modbus_ApplySensorValveNormalToGPIO(ch);
     }
 }
@@ -184,6 +219,7 @@ static void Blowback_UpdateOne(uint8_t ch)
 {
     uint16_t duration = Var_Read_SensorBlowDuration(ch);
     uint16_t cmd = Var_Read_SensorBlowCmd(ch);
+    uint8_t cal_active = (Var_Read_SensorValve(ch, 2u) != 0u) ? 1u : 0u;
 
     BlowCh_t *sc = &s_ch[ch];
 
@@ -196,6 +232,29 @@ static void Blowback_UpdateOne(uint8_t ch)
         UNLOCK_VAR();
     }
 
+    if (cal_active) {
+        Modbus_ClearManualSuctionOverride(ch);
+        BLOW_CONTROL(ch, 0);
+        xTimerStop(sc->timer, portMAX_DELAY);
+        sc->blow_was_stopped = 1;
+        Var_Write_SensorBlowCmd(ch, 0);
+        Var_Write_SensorValve(ch, 0u, 0u);
+        Var_Write_SensorValve(ch, 1u, 0u);
+        LOCK_VAR();
+        if (ch == 0) {
+            g_tVar.S1.blow_status = 0u;
+            g_tVar.S1.blow_countdown = 0u;
+        } else if (ch == 1) {
+            g_tVar.S2.blow_status = 0u;
+            g_tVar.S2.blow_countdown = 0u;
+        } else {
+            g_tVar.S3.blow_status = 0u;
+            g_tVar.S3.blow_countdown = 0u;
+        }
+        UNLOCK_VAR();
+        return;
+    }
+
     if (cmd == 3u || cmd == 0xFFFFu) {
         BLOW_CONTROL(ch, 0);
         xTimerStop(sc->timer, portMAX_DELAY);
@@ -204,23 +263,27 @@ static void Blowback_UpdateOne(uint8_t ch)
         cmd = 0;
     }
     if (cmd == 1u) {
-        if (!sc->blow_flag)
+        if (!Blowback_IsChannelBlowing(ch))
             BLOW_CONTROL(ch, 1);
         Var_Write_SensorBlowCmd(ch, 0);
         cmd = 0;
     }
     if (cmd == 2u) {
-        BLOW_CONTROL(ch, 1);
-        time_1s_blow = 0;
-        sc->blow_was_stopped = 0;
+        if (!Blowback_IsChannelBlowing(ch)) {
+            BLOW_CONTROL(ch, 1);
+            time_1s_blow = 0;
+            sc->blow_was_stopped = 0;
+        }
         Var_Write_SensorBlowCmd(ch, 0);
         cmd = 0;
     }
 
     if (sc->blowspan == 0u) {
-        BLOW_CONTROL(ch, 0);
-        xTimerStop(sc->timer, portMAX_DELAY);
-        sc->blow_was_stopped = 1;
+        if (!sc->blow_flag) {
+            BLOW_CONTROL(ch, 0);
+            xTimerStop(sc->timer, portMAX_DELAY);
+            sc->blow_was_stopped = 1;
+        }
     } else if (sc->blow_was_stopped) {
         time_1s_blow = 0u;
         sc->blow_was_stopped = 0u;
@@ -230,7 +293,7 @@ static void Blowback_UpdateOne(uint8_t ch)
     Blowback_NormalizeTiming(sc);
 
     uint32_t tick = time_1s_blow;
-    if (sc->blowspan != 0u && !sc->blow_flag) {
+    if (sc->blowspan != 0u && !Blowback_IsChannelBlowing(ch)) {
         uint32_t phase = Blowback_PhaseSec(ch, sc->blowspan);
         uint32_t first_fire = Blowback_FirstFireSec(ch, sc->blowspan);
         uint8_t fire = ((tick % sc->blowspan) == phase) ? 1u : 0u;
@@ -247,6 +310,7 @@ static void Blowback_UpdateOne(uint8_t ch)
      */
     {
         uint32_t cd = 0u;
+        uint8_t blow_active = Blowback_IsChannelBlowing(ch);
         if (sc->blow_flag) {
             /* Blowing: show remaining blow duration */
             uint32_t elapsed = time_1s - sc->blow_start_time_1s;
@@ -254,6 +318,8 @@ static void Blowback_UpdateOne(uint8_t ch)
                 cd = sc->blowtime - elapsed;
             else
                 cd = 0u; /* timer callback will clear valve shortly */
+        } else if (blow_active) {
+            cd = 0u; /* manual blow valve is on; no timer countdown */
         } else if (sc->blowspan != 0u) {
             /* Idle: show seconds until next scheduled blow (interval phase) */
             uint32_t span = sc->blowspan;
@@ -270,13 +336,13 @@ static void Blowback_UpdateOne(uint8_t ch)
         }
         LOCK_VAR();
         if (ch == 0) {
-            g_tVar.S1.blow_status = sc->blow_flag ? 1u : 0u;
+            g_tVar.S1.blow_status = blow_active ? 1u : 0u;
             g_tVar.S1.blow_countdown = (uint16_t)(cd > 65535u ? 65535u : cd);
         } else if (ch == 1) {
-            g_tVar.S2.blow_status = sc->blow_flag ? 1u : 0u;
+            g_tVar.S2.blow_status = blow_active ? 1u : 0u;
             g_tVar.S2.blow_countdown = (uint16_t)(cd > 65535u ? 65535u : cd);
         } else {
-            g_tVar.S3.blow_status = sc->blow_flag ? 1u : 0u;
+            g_tVar.S3.blow_status = blow_active ? 1u : 0u;
             g_tVar.S3.blow_countdown = (uint16_t)(cd > 65535u ? 65535u : cd);
         }
         UNLOCK_VAR();
