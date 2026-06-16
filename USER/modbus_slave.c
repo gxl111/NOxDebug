@@ -47,12 +47,15 @@ static void MODS_05H(void);
 static void MODS_06H(void);
 static void MODS_10H(void);
 
-static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value);
-static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value);
+static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint16_t remaining, uint8_t *reg_value);
+static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint16_t remaining, uint8_t* reg_value);
 
 void MODS_ReciveNew(uint8_t _byte);
 
 static float RegistersToFloat_BE(uint16_t reg1, uint16_t reg2);
+static uint8_t MODS_IsFloatStartAddr(uint16_t addr);
+static uint8_t MODS_IsFloatLowAddr(uint16_t addr);
+static uint8_t MODS_IsReadOnlyRegAddr(uint16_t addr);
 
 
 
@@ -563,7 +566,7 @@ static void MODS_03H(void)
     LOCK_VAR();
     for (i = 0; i < num; )
     {
-         uint8_t read_state = MODS_ReadRegValue(reg, &reg_value[2 * i]);
+         uint8_t read_state = MODS_ReadRegValue(reg, (uint16_t)(num - i), &reg_value[2 * i]);
          if (read_state == 0) {
             g_tModS.RspCode = RSP_ERR_REG_ADDR;
             break;
@@ -697,7 +700,7 @@ static void MODS_06H(void)
     reg = BEBufToUint16(&g_tModS.RxFrameSnap[2]); 	
 
     
-    write_state = MODS_WriteRegValue(reg, &g_tModS.RxFrameSnap[4]);
+    write_state = MODS_WriteRegValue(reg, 1u, &g_tModS.RxFrameSnap[4]);
     
     if (write_state!=0)	
     {
@@ -733,7 +736,7 @@ static void MODS_10H(void)
     uint16_t reg_addr;
     uint16_t reg_num;
     uint16_t byte_num;
-    uint8_t i;
+    uint16_t i;
 //    uint16_t value;
 
 
@@ -753,7 +756,7 @@ static void MODS_10H(void)
     byte_num = g_tModS.RxFrameSnap[6];					
 
     
-    if (byte_num != 2 * reg_num)
+    if (reg_num == 0u || reg_num > MODBUS_FC10_MAX_REGS || byte_num != 2u * reg_num)
     {
         g_tModS.RspCode = RSP_ERR_VALUE;			
         goto err_ret;
@@ -774,7 +777,7 @@ static void MODS_10H(void)
         
 
         
-        uint8_t write_state=MODS_WriteRegValue(reg_addr, &g_tModS.RxFrameSnap[7 + 2 * i]);
+        uint8_t write_state = MODS_WriteRegValue(reg_addr, (uint16_t)(reg_num - i), &g_tModS.RxFrameSnap[7 + 2 * i]);
         if (write_state == 2)
         {
             ++i;
@@ -810,12 +813,101 @@ union { float f; uint32_t u; } converter;
 
 static float RegistersToFloat_BE(uint16_t reg1, uint16_t reg2);
 
-static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint8_t *reg_value)
+static uint8_t MODS_IsFloatStartAddr(uint16_t addr)
+{
+    switch (addr) {
+        case SLAVE_REG_NOX_OUTPUT:
+        case SLAVE_REG_O2_OUTPUT:
+        case SLAVE_REG_ALARM_NOX_HI:
+        case SLAVE_REG_ALARM_O2_LO:
+        case SLAVE_REG_S1_LIVE_NOX:
+        case SLAVE_REG_S1_LIVE_O2:
+        case SLAVE_REG_S1_SEG1_NOX_A:
+        case SLAVE_REG_S1_SEG1_NOX_B:
+        case SLAVE_REG_S1_SEG1_O2_A:
+        case SLAVE_REG_S1_SEG1_O2_B:
+        case SLAVE_REG_S1_SEG2_NOX_A:
+        case SLAVE_REG_S1_SEG2_NOX_B:
+        case SLAVE_REG_S1_SEG2_O2_A:
+        case SLAVE_REG_S1_SEG2_O2_B:
+        case SLAVE_REG_S1_P2_NOX:
+        case SLAVE_REG_S1_P2_O2:
+        case SLAVE_REG_S1_P3_NOX:
+        case SLAVE_REG_S1_P3_O2:
+        case SLAVE_REG_S2_LIVE_NOX:
+        case SLAVE_REG_S2_LIVE_O2:
+        case SLAVE_REG_S2_SEG1_NOX_A:
+        case SLAVE_REG_S2_SEG1_NOX_B:
+        case SLAVE_REG_S2_SEG1_O2_A:
+        case SLAVE_REG_S2_SEG1_O2_B:
+        case SLAVE_REG_S2_SEG2_NOX_A:
+        case SLAVE_REG_S2_SEG2_NOX_B:
+        case SLAVE_REG_S2_SEG2_O2_A:
+        case SLAVE_REG_S2_SEG2_O2_B:
+        case SLAVE_REG_S2_P2_NOX:
+        case SLAVE_REG_S2_P2_O2:
+        case SLAVE_REG_S2_P3_NOX:
+        case SLAVE_REG_S2_P3_O2:
+        case SLAVE_REG_S3_LIVE_NOX:
+        case SLAVE_REG_S3_LIVE_O2:
+        case SLAVE_REG_S3_SEG1_NOX_A:
+        case SLAVE_REG_S3_SEG1_NOX_B:
+        case SLAVE_REG_S3_SEG1_O2_A:
+        case SLAVE_REG_S3_SEG1_O2_B:
+        case SLAVE_REG_S3_SEG2_NOX_A:
+        case SLAVE_REG_S3_SEG2_NOX_B:
+        case SLAVE_REG_S3_SEG2_O2_A:
+        case SLAVE_REG_S3_SEG2_O2_B:
+        case SLAVE_REG_S3_P2_NOX:
+        case SLAVE_REG_S3_P2_O2:
+        case SLAVE_REG_S3_P3_NOX:
+        case SLAVE_REG_S3_P3_O2:
+            return 1u;
+        default:
+            return 0u;
+    }
+}
+
+static uint8_t MODS_IsFloatLowAddr(uint16_t addr)
+{
+    if (addr == 0u)
+        return 0u;
+    return MODS_IsFloatStartAddr((uint16_t)(addr - 1u));
+}
+
+static uint8_t MODS_IsReadOnlyRegAddr(uint16_t addr)
+{
+    switch (addr) {
+        case SLAVE_REG_OUTPUT_CH_STATUS:
+        case SLAVE_REG_OUTPUT_SENSOR:
+        case SLAVE_REG_S1_LIVE_NOX:
+        case SLAVE_REG_S1_LIVE_O2:
+        case SLAVE_REG_S1_STATUS:
+        case SLAVE_REG_S1_BLOW_STATUS:
+        case SLAVE_REG_S1_BLOW_CD:
+        case SLAVE_REG_S2_LIVE_NOX:
+        case SLAVE_REG_S2_LIVE_O2:
+        case SLAVE_REG_S2_STATUS:
+        case SLAVE_REG_S2_BLOW_STATUS:
+        case SLAVE_REG_S2_BLOW_CD:
+        case SLAVE_REG_S3_LIVE_NOX:
+        case SLAVE_REG_S3_LIVE_O2:
+        case SLAVE_REG_S3_STATUS:
+        case SLAVE_REG_S3_BLOW_STATUS:
+        case SLAVE_REG_S3_BLOW_CD:
+            return 1u;
+        default:
+            return 0u;
+    }
+}
+
+static uint8_t MODS_ReadRegValue(uint16_t reg_addr, uint16_t remaining, uint8_t *reg_value)
 {
     uint16_t addr = reg_addr + SLAVE_REG_START;
     uint16_t value = 0;
     float f_value = 0.0f;
     uint8_t f_flag = 0;
+    uint8_t float_low = MODS_IsFloatLowAddr(addr);
     SensorRegs_t *s;
 
     if (addr <= COMMON_REG_END) {
@@ -964,11 +1056,17 @@ sensor_read:
 output:
     if (f_flag) {
         converter.f = f_value;
-        reg_value[0] = (converter.u >> 24) & 0xFF;
-        reg_value[1] = (converter.u >> 16) & 0xFF;
-        reg_value[2] = (converter.u >> 8) & 0xFF;
-        reg_value[3] = converter.u & 0xFF;
-        return 2;
+        if (float_low) {
+            value = (uint16_t)(converter.u & 0xFFFFu);
+        } else if (remaining >= 2u) {
+            reg_value[0] = (converter.u >> 24) & 0xFF;
+            reg_value[1] = (converter.u >> 16) & 0xFF;
+            reg_value[2] = (converter.u >> 8) & 0xFF;
+            reg_value[3] = converter.u & 0xFF;
+            return 2;
+        } else {
+            value = (uint16_t)((converter.u >> 16) & 0xFFFFu);
+        }
     }
     reg_value[0] = value >> 8;
     reg_value[1] = value & 0xFF;
@@ -980,13 +1078,20 @@ output:
 *  MODS_WriteRegValue: map (reg_addr + SLAVE_REG_START) to g_tVar. Returns 1=u16, 2=float, 0=error
 *********************************************************************************************************
 */
-static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint8_t* reg_value)
+static uint8_t MODS_WriteRegValue(uint16_t reg_addr, uint16_t remaining, uint8_t* reg_value)
 {
     uint16_t addr = reg_addr + SLAVE_REG_START;
     uint16_t value = BEBufToUint16(reg_value);
     uint16_t value1;
     uint8_t f_flag = 0;
     SensorRegs_t *s;
+
+    if (MODS_IsFloatLowAddr(addr))
+        return 0;
+    if (MODS_IsReadOnlyRegAddr(addr))
+        return 0;
+    if (MODS_IsFloatStartAddr(addr) && remaining < 2u)
+        return 0;
 
     if (addr <= COMMON_REG_END) {
         LOCK_VAR();

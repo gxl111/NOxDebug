@@ -161,6 +161,8 @@ extern SemaphoreHandle_t g_hVarMutex;
 #define RSP_ERR_WRITE       0x04
 
 #define S_RX_BUF_SIZE       60
+/* 10H 请求帧：地址/功能/起始/数量/字节数/CRC 共 9 字节，其余为数据区。 */
+#define MODBUS_FC10_MAX_REGS           ((S_RX_BUF_SIZE - 9u) / 2u)
 /* 03H 最多 125 字 ×2 字节 + 地址/功能/字节数/CRC ≈ 255，留余量 */
 #define S_TX_BUF_SIZE       260
 

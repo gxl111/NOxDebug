@@ -116,7 +116,7 @@
 
 /*
  * Factory Flash programming on boot:
- * 1 = After Register_Init, run FactoryFlash_ProgramDefaults() then do not Load; RAM keeps FF until next boot.
+ * 1 = After Register_Init, run FactoryFlash_ProgramDefaults() then do not Load; RAM keeps defaults for this boot.
  *     Set back to 0 and rebuild for normal operation (Load on boot) or every boot will overwrite Flash.
  * 0 = Normal: LoadRegistersFromFlash() on boot.
  */

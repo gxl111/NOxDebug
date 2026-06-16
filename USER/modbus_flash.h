@@ -12,7 +12,7 @@
 #define FLASH_USER_START_ADDR   0x0803F800
 #define FLASH_USER_END_ADDR     0x08040000
 
-/** Write g_tVar params (P03-P21, P41-P52) to Flash. Returns 1 on success, -1 on error. */
+/** Write S1/S2/S3 calibration floats plus blowback interval/duration to Flash. Returns 1 on success, -1 on error. */
 int InternalFlash_Write(void);
 
 /** Load g_tVar params from Flash into RAM. */
